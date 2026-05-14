@@ -1,6 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
 import type { Context } from "hono";
+import { config } from "../config.js";
 import {
   toOpenAIMessages,
   toOpenAIToolChoice,
@@ -15,13 +16,20 @@ import type {
 } from "../types/anthropic.js";
 
 function getProvider() {
-  const apiKey = process.env.CHAT_API_KEY ?? "no-key";
-  const baseURL = process.env.CHAT_BASE_URL ?? "http://localhost:11434/v1";
+  const { apiKey, baseURL, authType } = config;
+  if (authType === "api-key") {
+    return createOpenAI({
+      apiKey: "no-key",
+      baseURL,
+      headers: { "api-key": apiKey },
+      compatibility: "compatible",
+    });
+  }
   return createOpenAI({ apiKey, baseURL, compatibility: "compatible" });
 }
 
 function resolveModel(requestedModel: string): string {
-  return process.env.CHAT_DEFAULT_MODEL || requestedModel;
+  return config.defaultModel || requestedModel;
 }
 
 function makeMessageId(): string {
