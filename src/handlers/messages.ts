@@ -63,6 +63,15 @@ export async function handleMessages(c: Context): Promise<Response> {
     return c.json({ type: "error", error: { type: "invalid_request_error", message: "Invalid JSON" } }, 400);
   }
 
+  const toolNames = body.tools?.map((t) => t.name) ?? [];
+  console.log("[request]", JSON.stringify({
+    model: body.model,
+    stream: body.stream ?? false,
+    messages: body.messages,
+    tools: toolNames.length > 0 ? toolNames : undefined,
+    tool_choice: body.tool_choice,
+  }, null, 2));
+
   const provider = getProvider();
   const model = resolveModel(body.model);
   const messages = toOpenAIMessages(body.messages, body.system);
