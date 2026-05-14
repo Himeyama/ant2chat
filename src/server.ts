@@ -9,8 +9,22 @@ const C = {
   green: "\x1b[32m",
   yellow: "\x1b[33m",
   magenta: "\x1b[35m",
+  blue: "\x1b[34m",
   dim: "\x1b[2m",
 } as const;
+
+export function highlightJson(json: string): string {
+  return json.replace(
+    /("(?:[^"\\]|\\.)*")(\s*:)?|(\btrue\b|\bfalse\b|\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    (match, str, colon, keyword, number) => {
+      if (str && colon) return `${C.cyan}${str}${C.reset}${colon}`;  // キー
+      if (str)          return `${C.green}${str}${C.reset}`;         // 文字列値
+      if (keyword)      return `${C.yellow}${keyword}${C.reset}`;    // true/false/null
+      if (number)       return `${C.blue}${number}${C.reset}`;       // 数値
+      return match;
+    }
+  );
+}
 
 function colorMethod(method: string): string {
   switch (method) {
@@ -32,6 +46,7 @@ export function createApp() {
     const headerLines = [...c.req.raw.headers.entries()]
       .map(([k, v]) => `  ${C.dim}${k}:${C.reset} ${v}`)
       .join("\n");
+
     console.log(`${method} ${url}\n${headerLines}`);
     await next();
   });

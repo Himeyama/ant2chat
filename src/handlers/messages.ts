@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
+import { highlightJson } from "../server.js";
 import {
   toOpenAIMessages,
   toOpenAIToolChoice,
@@ -65,13 +66,14 @@ export async function handleMessages(c: Context): Promise<Response> {
   }
 
   const toolNames = body.tools?.map((t) => t.name) ?? [];
-  console.log("[request]", JSON.stringify({
+  const summary = {
     model: body.model,
     stream: body.stream ?? false,
     messages: body.messages,
     tools: toolNames.length > 0 ? toolNames : undefined,
     tool_choice: body.tool_choice,
-  }, null, 2));
+  };
+  console.log(highlightJson(JSON.stringify(summary, null, 2)));
 
   const provider = getProvider();
   const model = resolveModel(body.model);
