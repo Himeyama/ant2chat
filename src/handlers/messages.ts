@@ -100,9 +100,9 @@ export async function handleMessages(c: Context): Promise<Response> {
   const messages = toOpenAIMessages(body.messages, body.system);
   const clientTools = toOpenAITools(body.tools);
   // WebSearch はクライアント定義を上書きしてサーバー側で実行する
-  const tools: ToolSet = { "google_search": googleSearchTool, "google:search": googleSearchTool, ...clientTools, "WebSearch": googleSearchTool };
+  const tools: ToolSet = { ...clientTools, "google_search": googleSearchTool, "WebSearch": googleSearchTool };
   // サーバー側で内部処理するツール名: クライアントには公開しない
-  const serverToolNames = new Set(["google_search", "google:search", "WebSearch"]);
+  const serverToolNames = new Set(["google_search", "WebSearch"]);
   const toolChoice = toOpenAIToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
