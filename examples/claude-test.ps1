@@ -1,0 +1,5 @@
+$env:ANTHROPIC_BASE_URL = "http://localhost:3000"
+$env:ANTHROPIC_API_KEY = "sk-ant-dummy"
+
+claude --model gemma4:e4b
+
