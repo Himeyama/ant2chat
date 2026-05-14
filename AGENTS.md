@@ -116,6 +116,81 @@ pnpm start      # ビルド済みファイルで起動
 | `@ai-sdk/openai` | OpenAI 互換プロバイダー (`createOpenAI`) |
 | `tsx` | 開発時 TypeScript 実行 |
 
+## パッケージ化とインストール
+
+### グローバルインストール（ローカルから）
+
+最も手軽な方法。リポジトリをクローンして直接グローバルにインストールする。
+
+```bash
+pnpm build
+npm install -g .
+```
+
+インストール後、どのディレクトリからでも `ant2chat` コマンドで起動できる:
+
+```bash
+ant2chat
+```
+
+アンインストール:
+
+```bash
+npm uninstall -g ant2chat
+```
+
+### tarball として配布
+
+```bash
+pnpm build
+npm pack
+```
+
+`ant2chat-0.1.0.tgz` が生成される。他のマシンへ配布してインストール:
+
+```bash
+npm install -g ./ant2chat-0.1.0.tgz
+```
+
+### npm レジストリへ公開
+
+`package.json` の `"private": true` を削除してから:
+
+```bash
+pnpm build
+npm publish
+```
+
+公開後のインストール:
+
+```bash
+npm install -g ant2chat
+```
+
+### グローバルインストール時の環境変数
+
+グローバルインストール後は `.env` ファイルが読み込まれないため、環境変数を直接渡すか、シェルの設定ファイルに書く:
+
+```bash
+# 直接渡す
+CHAT_API_KEY=sk-xxx CHAT_BASE_URL=https://api.example.com/v1 ant2chat
+
+# ~/.bashrc や ~/.zshrc に追記して永続化
+export CHAT_API_KEY=sk-xxx
+export CHAT_BASE_URL=https://api.example.com/v1
+```
+
+Windows の場合:
+
+```powershell
+# 直接渡す
+$env:CHAT_API_KEY="sk-xxx"; $env:CHAT_BASE_URL="https://api.example.com/v1"; ant2chat
+
+# 永続化 (ユーザー環境変数)
+[System.Environment]::SetEnvironmentVariable("CHAT_API_KEY", "sk-xxx", "User")
+[System.Environment]::SetEnvironmentVariable("CHAT_BASE_URL", "https://api.example.com/v1", "User")
+```
+
 ## 拡張ポイント
 
 - **別プロバイダーへの対応**: `src/handlers/messages.ts` の `getProvider()` を差し替える
