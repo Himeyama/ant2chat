@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateText, streamText } from "ai";
+import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import {
@@ -7,6 +7,7 @@ import {
   toOpenAIToolChoice,
   toOpenAITools,
 } from "../converters/to-openai.js";
+import { googleSearchTool } from "../tools/google-search.js";
 import type {
   AnthropicRequest,
   AnthropicResponse,
@@ -75,7 +76,8 @@ export async function handleMessages(c: Context): Promise<Response> {
   const provider = getProvider();
   const model = resolveModel(body.model);
   const messages = toOpenAIMessages(body.messages, body.system);
-  const tools = toOpenAITools(body.tools);
+  const clientTools = toOpenAITools(body.tools);
+  const tools: ToolSet = { "google:search": googleSearchTool, ...clientTools };
   const toolChoice = toOpenAIToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
@@ -86,8 +88,9 @@ export async function handleMessages(c: Context): Promise<Response> {
     temperature: body.temperature,
     topP: body.top_p,
     stopSequences: body.stop_sequences,
-    ...(tools ? { tools } : {}),
+    tools,
     ...(toolChoice ? { toolChoice } : {}),
+    maxSteps: 5,
   };
 
   // ストリーミング
