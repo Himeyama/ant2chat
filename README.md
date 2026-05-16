@@ -146,9 +146,23 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 
 ### サポートしているリクエストフィールド
 
-`model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice`
+`model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice` / `thinking`
 
 未サポート: `top_k`、`image` コンテンツブロック
+
+### 思考 (thinking) の制御
+
+リクエストの `thinking` フィールドで reasoning モデルの思考を制御できる。プロバイダーごとに適切な形式へ変換される。
+
+- **Google / Gemini**: `thinkingBudget` (トークン予算) と `includeThoughts` に変換
+- **OpenAI / responses**: `budget_tokens` を `reasoningEffort` (`low` / `medium` / `high`) にマッピング。`responses` では思考要約も有効化
+- **ollama / その他**: 無視される
+
+```jsonc
+"thinking": { "type": "enabled", "budget_tokens": 16000 }
+// または
+"thinking": { "type": "disabled" }
+```
 
 ### OpenAI Responses API プロバイダー
 

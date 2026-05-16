@@ -98,9 +98,17 @@ pnpm start      # ビルド済みファイルで起動
 
 ### サポートしているリクエストフィールド
 
-`model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice`
+`model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice` / `thinking`
 
 未サポート: `top_k`、画像コンテンツ (`image` ブロックはテキスト変換時に無視される)
+
+### 思考 (thinking) の制御
+
+リクエストの `thinking` フィールド (`{ type: "enabled", budget_tokens }` / `{ type: "disabled" }`) を `toProviderOptions()` で各プロバイダーの `providerOptions` に変換し、`generateText` / `streamText` に渡す。
+
+- **Google / Gemini**: `providerOptions.google.thinkingConfig` に変換。`enabled` 時は `{ thinkingBudget: budget_tokens, includeThoughts: true }`、`disabled` 時は `{ thinkingBudget: 0 }`
+- **OpenAI / responses**: `providerOptions.openai.reasoningEffort` に変換。`budget_tokens` を段階へマッピング (`< 8192` → `low`、`< 24576` → `medium`、それ以上 → `high`)。`responses` プロバイダーでは加えて `reasoningSummary: "auto"` を設定し思考要約を有効化。`disabled` 時は何も設定しない
+- **ollama / その他**: `thinking` は無視 (reasoning モデルはモデル側で出力を制御するため)
 
 ### OpenAI Responses API プロバイダー
 
@@ -127,6 +135,7 @@ pnpm start      # ビルド済みファイルで起動
   - `"any"` → `"required"`
   - `"none"` → `"none"`
   - `{ type: "tool", name }` → `{ type: "tool", toolName: name }`
+- `thinking` → `providerOptions` (上記「思考 (thinking) の制御」を参照)
 
 ### レスポンス (OpenAI → Anthropic)
 

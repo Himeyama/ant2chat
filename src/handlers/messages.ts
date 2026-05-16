@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, streamText, type LanguageModelV1, type ToolSet } from "ai";
+import { generateText, streamText, type JSONValue, type LanguageModelV1, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
@@ -14,6 +14,7 @@ import type {
   AnthropicResponseContent,
   AnthropicStopReason,
   AnthropicStreamEvent,
+  AnthropicThinkingConfig,
 } from "../types/anthropic.js";
 
 function isGoogleProvider(providerName: string): boolean {
@@ -42,6 +43,43 @@ function getProvider(apiKey: string) {
 
 function resolveModel(requestedModel: string): string {
   return config.defaultModel || requestedModel;
+}
+
+// budget_tokens を OpenAI の reasoningEffort (low/medium/high) にマッピングする
+function budgetToReasoningEffort(budget: number): "low" | "medium" | "high" {
+  if (budget < 8192) return "low";
+  if (budget < 24576) return "medium";
+  return "high";
+}
+
+// Anthropic の thinking フィールドを各プロバイダーの providerOptions に変換する。
+//  - Google/Gemini: thinkingConfig.thinkingBudget (トークン予算) + includeThoughts
+//  - OpenAI/responses: reasoningEffort (budget_tokens から段階を導出)。responses は思考要約も有効化
+function toProviderOptions(
+  thinking: AnthropicThinkingConfig | undefined,
+  providerName: string
+): Record<string, Record<string, JSONValue>> | undefined {
+  if (!thinking) return undefined;
+
+  if (isGoogleProvider(providerName)) {
+    return {
+      google: {
+        thinkingConfig:
+          thinking.type === "enabled"
+            ? { thinkingBudget: thinking.budget_tokens, includeThoughts: true }
+            : { thinkingBudget: 0 },
+      },
+    };
+  }
+
+  if (thinking.type !== "enabled") return undefined;
+  const openaiOptions: Record<string, JSONValue> = {
+    reasoningEffort: budgetToReasoningEffort(thinking.budget_tokens),
+  };
+  if (isResponsesProvider(providerName)) {
+    openaiOptions.reasoningSummary = "auto";
+  }
+  return { openai: openaiOptions };
 }
 
 function makeMessageId(): string {
@@ -147,6 +185,8 @@ export async function handleMessages(c: Context): Promise<Response> {
       : provider(model)
   ) as LanguageModelV1;
 
+  const providerOptions = toProviderOptions(body.thinking, config.providerName);
+
   const commonParams = {
     model: languageModel,
     messages,
@@ -156,6 +196,7 @@ export async function handleMessages(c: Context): Promise<Response> {
     stopSequences: body.stop_sequences,
     tools,
     ...(toolChoice ? { toolChoice } : {}),
+    ...(providerOptions ? { providerOptions } : {}),
     maxSteps: 5,
   };
 

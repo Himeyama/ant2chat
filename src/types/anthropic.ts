@@ -48,6 +48,10 @@ export type AnthropicToolChoice =
 
 export type SystemBlock = { type: "text"; text: string; cache_control?: { type: string } };
 
+export type AnthropicThinkingConfig =
+  | { type: "enabled"; budget_tokens: number }
+  | { type: "disabled" };
+
 export interface AnthropicRequest {
   model: string;
   messages: AnthropicMessage[];
@@ -62,6 +66,7 @@ export interface AnthropicRequest {
   metadata?: { user_id?: string };
   tools?: AnthropicTool[];
   tool_choice?: AnthropicToolChoice;
+  thinking?: AnthropicThinkingConfig;
 }
 
 export type AnthropicStopReason =
