@@ -1,7 +1,6 @@
-import { jsonSchema, type CoreMessage, type ImagePart, type TextPart, type ToolSet } from "ai";
+import { type CoreMessage, type ImagePart, type TextPart } from "ai";
 import type {
   AnthropicMessage,
-  AnthropicTool,
   AnthropicToolChoice,
   ContentBlock,
   ContentBlockImage,
@@ -46,8 +45,8 @@ function toolResultContentToString(content: string | ContentBlockText[]): string
   return content.filter((b) => b.type === "text").map((b) => b.text).join("");
 }
 
-// OpenAI は ^[a-zA-Z0-9_-]+$ のみ許可するため、それ以外の文字を _ に置換する
-function sanitizeToolName(name: string): string {
+// ツール名に使えない文字を _ に置換する
+export function sanitizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
@@ -86,7 +85,7 @@ export function filterSystemForNonClaudeModel(
   return filtered.join('\n');
 }
 
-export function toOpenAIMessages(
+export function toMessages(
   messages: AnthropicMessage[],
   system?: string | SystemBlock[]
 ): CoreMessage[] {
@@ -94,6 +93,18 @@ export function toOpenAIMessages(
 
   if (system) {
     result.push({ role: "system", content: systemToString(system) });
+  }
+
+  // tool_use_id → toolName のマップを事前構築（Gemini は function_response.name が必須）
+  const toolNameById = new Map<string, string>();
+  for (const msg of messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      for (const block of msg.content) {
+        if (block.type === "tool_use") {
+          toolNameById.set(block.id, sanitizeToolName(block.name));
+        }
+      }
+    }
   }
 
   for (const msg of messages) {
@@ -141,7 +152,7 @@ export function toOpenAIMessages(
           return {
             type: "tool-result",
             toolCallId: tr.tool_use_id,
-            toolName: "",
+            toolName: toolNameById.get(tr.tool_use_id) ?? tr.tool_use_id,
             result: toolResultContentToString(tr.content),
             isError: tr.is_error,
           };
@@ -157,60 +168,7 @@ export function toOpenAIMessages(
   return result;
 }
 
-// OpenAI が許可しない JSON Schema キーワード
-// OpenAI が許可しない JSON Schema キーワード（format は値によらず常に除去）
-const DISALLOWED_KEYWORDS = new Set(["propertyNames", "if", "then", "else", "not", "contains", "patternProperties", "format"]);
-
-// OpenAI strict モード: 全オブジェクトに additionalProperties:false と全キーの required を再帰的に付与する
-function strictifySchema(node: Record<string, unknown>): Record<string, unknown> {
-  const result = { ...node };
-  for (const key of DISALLOWED_KEYWORDS) delete result[key];
-  if (result.properties && typeof result.properties === "object") {
-    const props = result.properties as Record<string, unknown>;
-    const strictProps: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(props)) {
-      strictProps[k] = strictifySchema(v as Record<string, unknown>);
-    }
-    result.properties = strictProps;
-    // properties に存在するキーのみ required に含める（余分なキーは OpenAI が拒否する）
-    result.required = Object.keys(props);
-    result.additionalProperties = false;
-  }
-  // additionalProperties がスキーマオブジェクト（辞書/マップ型）の場合、
-  // OpenAI strict モードは非対応なので空オブジェクトに変換する
-  if (!result.properties && result.additionalProperties && typeof result.additionalProperties === "object") {
-    result.properties = {};
-    result.required = [];
-    result.additionalProperties = false;
-  }
-  if (result.items && typeof result.items === "object" && !Array.isArray(result.items)) {
-    result.items = strictifySchema(result.items as Record<string, unknown>);
-  }
-  for (const key of ["allOf", "anyOf", "oneOf"] as const) {
-    if (Array.isArray(result[key])) {
-      result[key] = (result[key] as Record<string, unknown>[]).map(strictifySchema);
-    }
-  }
-  return result;
-}
-
-export function toOpenAITools(tools: AnthropicTool[] | undefined): ToolSet | undefined {
-  if (!tools || tools.length === 0) return undefined;
-  const out: ToolSet = {};
-  for (const t of tools) {
-    // $schema は多くの OpenAI 互換エンドポイントが拒否するため除去する
-    const raw = (t.input_schema ?? { type: "object", properties: {}, required: [] }) as Record<string, unknown> & { $schema?: unknown };
-    const { $schema, ...schema } = raw;
-    void $schema;
-    out[sanitizeToolName(t.name)] = {
-      description: t.description,
-      parameters: jsonSchema(strictifySchema(schema) as Parameters<typeof jsonSchema>[0]),
-    };
-  }
-  return out;
-}
-
-export function toOpenAIToolChoice(
+export function toToolChoice(
   choice: AnthropicToolChoice | undefined
 ):
   | "auto"

@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 const PROVIDER_URLS: Record<string, string> = {
   ollama: "http://localhost:11434/v1",
   openai: "https://api.openai.com/v1",
+  google: "",
 };
 
 const { values } = parseArgs({
@@ -26,7 +27,7 @@ Usage:
   ant2chat [options]
 
 Options:
-      --provider <name>   Upstream provider: ollama | openai (default: ollama)
+      --provider <name>   Upstream provider: ollama | openai | google (default: ollama)
   -u, --url <url>         Upstream base URL (overrides --provider)
   -p, --port <port>       Listen port (default: 3000)
   -k, --api-key <key>     Upstream API key
@@ -35,48 +36,54 @@ Options:
   -h, --help              Show this help
 
 Environment variables (overridden by CLI options):
-  CHAT_BASE_URL           Upstream base URL
-  PORT                    Listen port
-  CHAT_API_KEY            Upstream API key
-  OPENAI_API_KEY          API key fallback when --provider openai is used
-  CHAT_AUTH_TYPE          Auth header type
-  CHAT_DEFAULT_MODEL      Default model name
+  CHAT_BASE_URL                  Upstream base URL
+  PORT                           Listen port
+  CHAT_API_KEY                   Upstream API key
+  OPENAI_API_KEY                 API key fallback when --provider openai is used
+  GOOGLE_GENERATIVE_AI_API_KEY   API key fallback when --provider google is used
+  CHAT_AUTH_TYPE                 Auth header type
+  CHAT_DEFAULT_MODEL             Default model name
 `);
   process.exit(0);
 }
 
-function resolveBaseURL(): string {
+function resolveProvider(): string {
+  return String(values.provider ?? "ollama");
+}
+
+function resolveBaseURL(provider: string): string {
   if (values.url && values.provider) {
     console.warn(`\x1b[33mWarning: --url and --provider are both specified. --url takes precedence.\x1b[0m`);
   }
   if (values.url) return String(values.url);
   if (process.env.CHAT_BASE_URL) return process.env.CHAT_BASE_URL;
-  const provider = values.provider ?? "ollama";
-  const url = PROVIDER_URLS[String(provider)];
-  if (!url) {
+  if (!(provider in PROVIDER_URLS)) {
     console.error(`Unknown provider: "${provider}". Available: ${Object.keys(PROVIDER_URLS).join(", ")}`);
     process.exit(1);
   }
-  return url;
+  return PROVIDER_URLS[provider];
 }
 
 export type AuthType = "bearer" | "api-key";
 
-function resolveApiKey(): string {
+function resolveApiKey(provider: string): string {
   if (values["api-key"] != null) return String(values["api-key"]);
   if (process.env.CHAT_API_KEY) return process.env.CHAT_API_KEY;
-  const provider = values.provider ?? "ollama";
-  if (String(provider) === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  if (String(provider) !== "ollama") {
-    console.warn(`\x1b[33mWarning: No API key specified. Set --api-key, CHAT_API_KEY, or (for --provider openai) OPENAI_API_KEY.\x1b[0m`);
+  if (provider === "openai" && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+  if (provider === "google" && process.env.GOOGLE_GENERATIVE_AI_API_KEY) return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (provider !== "ollama") {
+    console.warn(`\x1b[33mWarning: No API key specified. Set --api-key, CHAT_API_KEY, or (for --provider openai) OPENAI_API_KEY, (for --provider google) GOOGLE_GENERATIVE_AI_API_KEY.\x1b[0m`);
   }
   return "";
 }
 
+const providerName = resolveProvider();
+
 export const config = {
-  baseURL:      resolveBaseURL(),
+  providerName,
+  baseURL:      resolveBaseURL(providerName),
   port:         Number(values.port        ?? process.env.PORT               ?? 3000),
-  apiKey:       resolveApiKey(),
+  apiKey:       resolveApiKey(providerName),
   authType:     String(values["auth-type"] ?? process.env.CHAT_AUTH_TYPE    ?? "bearer") as AuthType,
   defaultModel: values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? ""),
 };

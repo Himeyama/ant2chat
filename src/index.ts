@@ -3,12 +3,13 @@ import { serve } from "@hono/node-server";
 import { config } from "./config.js";
 import { createApp } from "./server.js";
 
-const { port, baseURL, authType, defaultModel } = config;
+const { port, baseURL, authType, defaultModel, providerName } = config;
 const app = createApp();
 
 serve({ fetch: app.fetch, port }, () => {
   console.log(`Anthropic → Chat Completions proxy listening on http://localhost:${port}`);
-  console.log(`  Upstream:  ${baseURL}`);
+  console.log(`  Provider:  ${providerName}`);
+  if (baseURL) console.log(`  Upstream:  ${baseURL}`);
   console.log(`  Auth type: ${authType}`);
   if (defaultModel) console.log(`  Model:     ${defaultModel} (forced)`);
 });

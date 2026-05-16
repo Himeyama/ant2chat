@@ -1,14 +1,12 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { generateText, streamText, type ToolSet } from "ai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { generateText, streamText, type LanguageModelV1, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import {
-  filterSystemForNonClaudeModel,
-  toOpenAIMessages,
-  toOpenAIToolChoice,
-  toOpenAITools,
-} from "../converters/to-openai.js";
+import { filterSystemForNonClaudeModel, toMessages, toToolChoice } from "../converters/shared.js";
+import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
+import { toGeminiTools } from "../converters/to-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
 import type {
   AnthropicRequest,
@@ -19,7 +17,10 @@ import type {
 } from "../types/anthropic.js";
 
 function getProvider(apiKey: string) {
-  const { baseURL, authType } = config;
+  const { baseURL, authType, providerName } = config;
+  if (providerName === "google") {
+    return createGoogleGenerativeAI({ apiKey });
+  }
   if (authType === "api-key") {
     return createOpenAI({
       apiKey: "no-key",
@@ -94,24 +95,29 @@ export async function handleMessages(c: Context): Promise<Response> {
     return c.json({ type: "error", error: { type: "invalid_request_error", message: "Invalid JSON" } }, 400);
   }
 
+  const apiKey = config.apiKey || c.req.header("x-api-key") || "no-key";
+  const provider = getProvider(apiKey);
+  const model = resolveModel(body.model);
+
   const toolNames = body.tools?.map((t) => t.name) ?? [];
-  const summary = {
-    model: body.model,
+  const summary: Record<string, unknown> = {
+    model,
     stream: body.stream ?? false,
     messages: body.messages,
     tools: toolNames.length > 0 ? toolNames : undefined,
     tool_choice: body.tool_choice,
   };
+  if (config.defaultModel && config.defaultModel !== body.model) {
+    summary["model_requested"] = body.model;
+  }
   console.log(highlightJson(JSON.stringify(summary, null, 2)));
-
-  const apiKey = config.apiKey || c.req.header("x-api-key") || "no-key";
-  const provider = getProvider(apiKey);
-  const model = resolveModel(body.model);
   const system = body.system != null && !model.toLowerCase().includes("claude")
     ? filterSystemForNonClaudeModel(body.system, model)
     : body.system;
-  const messages = toOpenAIMessages(body.messages, system);
-  const clientTools = toOpenAITools(body.tools);
+  const messages = toMessages(body.messages, system);
+  const clientTools = config.providerName === "google"
+    ? toGeminiTools(body.tools)
+    : toChatCompletionsTools(body.tools);
   // WebSearch はクライアント定義を上書きしてサーバー側で実行する
   const tools: ToolSet = { ...clientTools, "google_search": googleSearchTool, "WebSearch": googleSearchTool };
   // サーバー側で内部処理するツール名: クライアントには公開しない
@@ -122,11 +128,11 @@ export async function handleMessages(c: Context): Promise<Response> {
     typeof body.tool_choice === "object" &&
     "name" in body.tool_choice &&
     serverToolNames.has((body.tool_choice as { name: string }).name);
-  const toolChoice = isServerToolChoice ? undefined : toOpenAIToolChoice(body.tool_choice);
+  const toolChoice = isServerToolChoice ? undefined : toToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
   const commonParams = {
-    model: provider(model),
+    model: provider(model) as LanguageModelV1,
     messages,
     maxTokens: body.max_completion_tokens,
     temperature: body.temperature,
@@ -286,7 +292,8 @@ export async function handleMessages(c: Context): Promise<Response> {
         } catch (err) {
           console.error("[stream] upstream error:", err);
           const { type, message } = extractUpstreamError(err);
-          controller.enqueue(enc.encode(`event: error\ndata: ${JSON.stringify({ type: "error", error: { type, message } })}\n\n`));
+          const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
+          controller.enqueue(enc.encode(`event: error\ndata: ${JSON.stringify({ type: "error", error: { type, message: enriched } })}\n\n`));
         } finally {
           controller.close();
         }
@@ -341,6 +348,7 @@ export async function handleMessages(c: Context): Promise<Response> {
   } catch (err) {
     console.error("[non-stream] upstream error:", err);
     const { type, message, statusCode } = extractUpstreamError(err);
-    return c.json({ type: "error", error: { type, message } }, statusCode as 400 | 401 | 403 | 404 | 429 | 500 | 502);
+    const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
+    return c.json({ type: "error", error: { type, message: enriched } }, statusCode as 400 | 401 | 403 | 404 | 429 | 500 | 502);
   }
 }

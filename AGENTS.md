@@ -19,9 +19,9 @@ Anthropic Messages API (`/v1/messages`) を受け取り、OpenAI 互換の Chat 
   │  リクエスト変換
   ▼
 [toOpenAIMessages / toOpenAITools / toOpenAIToolChoice]  src/converters/to-openai.ts
-  │  Vercel AI SDK (ai / @ai-sdk/openai)
+  │  Vercel AI SDK (ai / @ai-sdk/openai / @ai-sdk/google)
   ▼
-上流 OpenAI 互換エンドポイント (CHAT_BASE_URL)
+上流エンドポイント (OpenAI 互換: CHAT_BASE_URL / Google Gemini API)
   │  レスポンス変換
   ▼
 クライアントへ返却 (Anthropic 形式 / SSE)
@@ -47,7 +47,7 @@ src/
 ant2chat [options]
 
 Options:
-      --provider <name>   上流プロバイダー: ollama | openai (デフォルト: ollama)
+      --provider <name>   上流プロバイダー: ollama | openai | google (デフォルト: ollama)
   -u, --url <url>         上流ベース URL (--provider より優先)
   -p, --port <port>       Listen ポート (デフォルト: 3000)
   -k, --api-key <key>     上流 API キー
@@ -68,6 +68,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `CHAT_BASE_URL` | 任意 | 上流エンドポイント。デフォルト: `http://localhost:11434/v1` |
 | `CHAT_DEFAULT_MODEL` | 任意 | デフォルトモデル名。`--model` CLI オプションで上書き可能 |
 | `OPENAI_API_KEY` | 任意 | `--provider openai` 使用時の API キーフォールバック |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | 任意 | `--provider google` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 任意 | 認証ヘッダー形式: bearer \| api-key |
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
 
@@ -137,6 +138,7 @@ pnpm start      # ビルド済みファイルで起動
 | `@hono/node-server` | Node.js アダプター |
 | `ai` | `generateText` / `streamText` / `jsonSchema` |
 | `@ai-sdk/openai` | OpenAI 互換プロバイダー (`createOpenAI`) |
+| `@ai-sdk/google` | Google Gemini プロバイダー (`createGoogleGenerativeAI`) |
 | `tsx` | 開発時 TypeScript 実行 |
 
 ## パッケージ化とインストール
