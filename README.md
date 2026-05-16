@@ -58,7 +58,7 @@ npm install -g ./ant2chat-0.1.0.tgz
 ant2chat [options]
 
 Options:
-      --provider <name>   上流プロバイダー: ollama | openai | google | gemini (デフォルト: ollama)
+      --provider <name>   上流プロバイダー: ollama | openai | responses | google | gemini (デフォルト: ollama)
   -u, --url <url>         上流ベース URL (--provider より優先)
   -p, --port <port>       Listen ポート (デフォルト: 3000)
   -k, --api-key <key>     上流 API キー
@@ -78,7 +78,7 @@ CLI オプションで上書き可能。
 | `CHAT_API_KEY` | 上流 API の認証キー |
 | `CHAT_BASE_URL` | 上流エンドポイント。デフォルト: `http://localhost:11434/v1` |
 | `CHAT_DEFAULT_MODEL` | デフォルトモデル名。空の場合はクライアントの `model` フィールドをそのまま使う |
-| `OPENAI_API_KEY` | `--provider openai` 使用時の API キーフォールバック |
+| `OPENAI_API_KEY` | `--provider openai` / `--provider responses` 使用時の API キーフォールバック |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | `--provider google` / `--provider gemini` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 認証ヘッダー形式 |
 | `PORT` | Listen ポート。デフォルト: `3000` |
@@ -113,6 +113,7 @@ ant2chat
 
 ```bash
 ant2chat --provider openai --api-key sk-xxx --model gpt-4o
+ant2chat --provider responses --api-key sk-xxx --model gpt-5
 ant2chat --provider gemini --api-key AIzaSy-xxx --model gemini-2.0-flash
 ant2chat --provider google --api-key AIzaSy-xxx --model gemini-2.0-flash
 ant2chat -u http://localhost:11434/v1 -m llama3.2
@@ -148,6 +149,10 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 `model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice`
 
 未サポート: `top_k`、`image` コンテンツブロック
+
+### OpenAI Responses API プロバイダー
+
+`--provider responses` を指定すると、上流の転送先が OpenAI Chat Completions API ではなく Responses API (`/v1/responses`) になる。reasoning (思考) モデルに対応しており、上流が返す思考内容は Anthropic の `thinking` / `redacted_thinking` ブロックに変換してクライアントへ返す。`--provider openai` (Chat Completions) はそのまま利用できる。
 
 ### Google / Gemini プロバイダーの制約
 

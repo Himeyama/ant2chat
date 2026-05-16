@@ -20,6 +20,10 @@ function isGoogleProvider(providerName: string): boolean {
   return providerName === "google" || providerName === "gemini";
 }
 
+function isResponsesProvider(providerName: string): boolean {
+  return providerName === "responses";
+}
+
 function getProvider(apiKey: string) {
   const { baseURL, customBaseURL, authType, providerName } = config;
   if (isGoogleProvider(providerName)) {
@@ -137,8 +141,14 @@ export async function handleMessages(c: Context): Promise<Response> {
   const toolChoice = isServerToolChoice ? undefined : toToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
+  const languageModel = (
+    isResponsesProvider(config.providerName)
+      ? (provider as ReturnType<typeof createOpenAI>).responses(model)
+      : provider(model)
+  ) as LanguageModelV1;
+
   const commonParams = {
-    model: provider(model) as LanguageModelV1,
+    model: languageModel,
     messages,
     maxTokens: body.max_completion_tokens,
     temperature: body.temperature,
@@ -163,6 +173,7 @@ export async function handleMessages(c: Context): Promise<Response> {
         // ブロック管理: index 0 はテキスト、tool_use は連番。
         // テキストは最初の text-delta 到来時に open する。
         let textBlockIndex: number | null = null;
+        let thinkingBlockIndex: number | null = null;
         let nextIndex = 0;
         // toolCallId -> { index, argsEmitted }
         const toolBlocks = new Map<string, { index: number; argsEmitted: boolean }>();
@@ -180,11 +191,50 @@ export async function handleMessages(c: Context): Promise<Response> {
           });
         };
 
+        const openThinkingBlock = () => {
+          if (thinkingBlockIndex !== null) return;
+          thinkingBlockIndex = nextIndex++;
+          openBlocks.add(thinkingBlockIndex);
+          enqueue({
+            type: "content_block_start",
+            index: thinkingBlockIndex,
+            content_block: { type: "thinking", thinking: "" },
+          });
+        };
+
         try {
           const result = streamText(commonParams);
 
           for await (const part of result.fullStream) {
             switch (part.type) {
+              case "reasoning": {
+                openThinkingBlock();
+                enqueue({
+                  type: "content_block_delta",
+                  index: thinkingBlockIndex!,
+                  delta: { type: "thinking_delta", thinking: part.textDelta },
+                });
+                break;
+              }
+              case "reasoning-signature": {
+                openThinkingBlock();
+                enqueue({
+                  type: "content_block_delta",
+                  index: thinkingBlockIndex!,
+                  delta: { type: "signature_delta", signature: part.signature },
+                });
+                break;
+              }
+              case "redacted-reasoning": {
+                const index = nextIndex++;
+                enqueue({
+                  type: "content_block_start",
+                  index,
+                  content_block: { type: "redacted_thinking", data: part.data },
+                });
+                enqueue({ type: "content_block_stop", index });
+                break;
+              }
               case "text-delta": {
                 openTextBlock();
                 enqueue({
@@ -324,6 +374,27 @@ export async function handleMessages(c: Context): Promise<Response> {
     const stopReason = mapFinishReason(result.finishReason, hasToolCalls);
 
     const content: AnthropicResponseContent[] = [];
+    const reasoningDetails = (result as {
+      reasoningDetails?: Array<
+        | { type: "text"; text: string; signature?: string }
+        | { type: "redacted"; data: string }
+      >;
+    }).reasoningDetails;
+    if (reasoningDetails && reasoningDetails.length > 0) {
+      for (const detail of reasoningDetails) {
+        if (detail.type === "text") {
+          content.push({
+            type: "thinking",
+            thinking: detail.text,
+            ...(detail.signature ? { signature: detail.signature } : {}),
+          });
+        } else {
+          content.push({ type: "redacted_thinking", data: detail.data });
+        }
+      }
+    } else if (result.reasoning) {
+      content.push({ type: "thinking", thinking: result.reasoning });
+    }
     if (result.text) {
       content.push({ type: "text", text: result.text });
     }

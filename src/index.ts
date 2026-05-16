@@ -7,7 +7,11 @@ const { port, baseURL, authType, defaultModel, providerName } = config;
 const app = createApp();
 
 serve({ fetch: app.fetch, port }, () => {
-  console.log(`Anthropic → Chat Completions proxy listening on http://localhost:${port}`);
+  const apiLabel =
+    providerName === "responses" ? "Responses API" :
+    providerName === "google" || providerName === "gemini" ? "Gemini API" :
+    "Chat Completions";
+  console.log(`Anthropic → ${apiLabel} proxy listening on http://localhost:${port}`);
   console.log(`  Provider:  ${providerName}`);
   if (baseURL) console.log(`  Upstream:  ${baseURL}`);
   console.log(`  Auth type: ${authType}`);

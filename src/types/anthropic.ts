@@ -17,7 +17,7 @@ export type ContentBlockToolResult = {
   content: string | ContentBlockText[];
   is_error?: boolean;
 };
-export type ContentBlockThinking = { type: "thinking"; thinking: string };
+export type ContentBlockThinking = { type: "thinking"; thinking: string; signature?: string };
 export type ContentBlockRedactedThinking = { type: "redacted_thinking"; data: string };
 export type ContentBlock =
   | ContentBlockText
@@ -70,7 +70,11 @@ export type AnthropicStopReason =
   | "stop_sequence"
   | "tool_use";
 
-export type AnthropicResponseContent = ContentBlockText | ContentBlockToolUse;
+export type AnthropicResponseContent =
+  | ContentBlockText
+  | ContentBlockToolUse
+  | ContentBlockThinking
+  | ContentBlockRedactedThinking;
 
 export interface AnthropicResponse {
   id: string;
@@ -86,11 +90,15 @@ export interface AnthropicResponse {
 // SSE イベント型
 export type ContentBlockStartBlock =
   | ContentBlockText
+  | ContentBlockThinking
+  | ContentBlockRedactedThinking
   | { type: "tool_use"; id: string; name: string; input: Record<string, never> };
 
 export type ContentBlockDeltaPayload =
   | { type: "text_delta"; text: string }
-  | { type: "input_json_delta"; partial_json: string };
+  | { type: "input_json_delta"; partial_json: string }
+  | { type: "thinking_delta"; thinking: string }
+  | { type: "signature_delta"; signature: string };
 
 export type AnthropicStreamEvent =
   | { type: "message_start"; message: Omit<AnthropicResponse, "content"> & { content: [] } }

@@ -47,7 +47,7 @@ src/
 ant2chat [options]
 
 Options:
-      --provider <name>   上流プロバイダー: ollama | openai | google | gemini (デフォルト: ollama)
+      --provider <name>   上流プロバイダー: ollama | openai | responses | google | gemini (デフォルト: ollama)
   -u, --url <url>         上流ベース URL (--provider より優先)
   -p, --port <port>       Listen ポート (デフォルト: 3000)
   -k, --api-key <key>     上流 API キー
@@ -67,7 +67,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `CHAT_API_KEY` | 推奨 | 上流 API の認証キー |
 | `CHAT_BASE_URL` | 任意 | 上流エンドポイント。デフォルト: `http://localhost:11434/v1` |
 | `CHAT_DEFAULT_MODEL` | 任意 | デフォルトモデル名。`--model` CLI オプションで上書き可能 |
-| `OPENAI_API_KEY` | 任意 | `--provider openai` 使用時の API キーフォールバック |
+| `OPENAI_API_KEY` | 任意 | `--provider openai` / `--provider responses` 使用時の API キーフォールバック |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | 任意 | `--provider google` / `--provider gemini` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 任意 | 認証ヘッダー形式: bearer \| api-key |
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
@@ -94,13 +94,17 @@ pnpm start      # ビルド済みファイルで起動
 - `stream: false` (省略時) → `generateText` で同期レスポンスを返す
 - `stream: true` → `streamText` で SSE ストリームを返す。イベント順は Anthropic 仕様に準拠:
   `message_start` → `ping` → `content_block_start` → `content_block_delta` (×N) → `content_block_stop` → `message_delta` → `message_stop`
-  - テキストブロックと `tool_use` ブロックは index で管理。テキストは最初の delta 到来時に open する
+  - `thinking` / テキスト / `tool_use` ブロックは index で管理。テキストと `thinking` は最初の delta 到来時に open する
 
 ### サポートしているリクエストフィールド
 
 `model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice`
 
 未サポート: `top_k`、画像コンテンツ (`image` ブロックはテキスト変換時に無視される)
+
+### OpenAI Responses API プロバイダー
+
+`--provider responses` 使用時、`getProvider()` が返す OpenAI プロバイダーの `.responses(model)` を使い、上流を Chat Completions ではなく Responses API (`/v1/responses`) に転送する (`isResponsesProvider()` で判定)。ベース URL は `https://api.openai.com/v1`。reasoning モデルの思考出力は `thinking` / `redacted_thinking` ブロックに変換する (下記「変換ルール」参照)。
 
 ### Google / Gemini プロバイダーの制約
 
@@ -132,7 +136,10 @@ pnpm start      # ビルド済みファイルで起動
 - `usage.promptTokens` → `usage.input_tokens`
 - `usage.completionTokens` → `usage.output_tokens`
 - ストリーミング時の `message_start` の `input_tokens` は `0` (上流が usage を返さないため)
-- 非ストリーミング時のレスポンス `content` には `text` ブロックと `tool_use` ブロックが混在する場合がある
+- 非ストリーミング時のレスポンス `content` には `thinking` / `text` / `tool_use` ブロックが混在する場合がある
+- reasoning (`--provider responses` などの思考モデル) の出力:
+  - 非ストリーミング: `result.reasoningDetails` を `thinking` / `redacted_thinking` ブロックに変換 (`reasoningDetails` が無い場合は `result.reasoning` 文字列を `thinking` ブロックに)
+  - ストリーミング: `reasoning` パート → `thinking` ブロック (`thinking_delta`)、`reasoning-signature` → `signature_delta`、`redacted-reasoning` → `redacted_thinking` ブロック
 
 ## 依存関係
 
