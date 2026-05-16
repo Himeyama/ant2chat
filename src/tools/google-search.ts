@@ -154,7 +154,10 @@ async function fetchWebResults(query: string): Promise<SearchResult[]> {
     body: `q=${encodeURIComponent(query)}`,
   });
 
-  if (!res.ok) return [];
+  if (!res.ok) {
+    console.warn("[google:search] HTTP %d", res.status);
+    return [];
+  }
 
   const html = await res.text();
   if (isCloudflareChallenge(html, res.status)) {
@@ -174,6 +177,10 @@ async function fetchWebResults(query: string): Promise<SearchResult[]> {
   const snippets: string[] = [];
   while ((m = snippetRe.exec(html)) !== null) {
     snippets.push(m[1].replace(/<[^>]+>/g, "").trim());
+  }
+
+  if (links.length === 0) {
+    console.warn("[google:search] no links found. HTML (first 3000 chars):\n%s", html.slice(0, 3000));
   }
 
   return links.slice(0, 5).map((l, i) => ({ ...l, snippet: snippets[i] ?? "" }));

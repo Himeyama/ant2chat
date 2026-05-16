@@ -112,7 +112,13 @@ export async function handleMessages(c: Context): Promise<Response> {
   const tools: ToolSet = { ...clientTools, "google_search": googleSearchTool, "WebSearch": googleSearchTool };
   // サーバー側で内部処理するツール名: クライアントには公開しない
   const serverToolNames = new Set(["google_search", "WebSearch"]);
-  const toolChoice = toOpenAIToolChoice(body.tool_choice);
+  // サーバー側ツールを指定した tool_choice は全ステップに伝播して無限ループになるため無視する
+  const isServerToolChoice =
+    body.tool_choice != null &&
+    typeof body.tool_choice === "object" &&
+    "name" in body.tool_choice &&
+    serverToolNames.has((body.tool_choice as { name: string }).name);
+  const toolChoice = isServerToolChoice ? undefined : toOpenAIToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
   const commonParams = {
