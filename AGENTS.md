@@ -104,10 +104,7 @@ pnpm start      # ビルド済みファイルで起動
 
 ### Google プロバイダーの制約
 
-`--provider google` 使用時、以下の 2 つの対策を自動で適用する:
-
-1. **thinking 無効化** (`thinkingBudget: 0`): Gemini 思考モデルはツール呼び出しに `thought_signature` を付与するが、Anthropic フォーマットにその概念がないため常に無効化する。
-2. **ツール履歴のテキスト化** (`flattenToolHistory`): マルチターン会話で過去の `tool_use` / `tool_result` を `functionCall` パーツではなくテキストに変換する。Gemini は思考モデルのツール呼び出し履歴に `thought_signature` を要求するが、Anthropic 経由では署名が失われるためテキスト形式で代替する。
+`--provider google` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` を `functionCall` パーツではなくテキストに変換する (`flattenToolHistory`)。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT` エラーを回避する。
 
 ## 変換ルール
 

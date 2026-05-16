@@ -150,10 +150,7 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 
 ### Google プロバイダーの制約
 
-`--provider google` 使用時、以下の 2 つの対策を自動で適用する:
-
-1. **thinking 無効化** (`thinkingBudget: 0`): Gemini 思考モデルはツール呼び出しに `thought_signature` を付与するが、Anthropic フォーマットにその概念がないため常に無効化する。
-2. **ツール履歴のテキスト化**: マルチターン会話で過去の `tool_use` / `tool_result` をテキスト形式に変換する。Gemini は思考モデルのツール呼び出し履歴に `thought_signature` を要求するが、Anthropic 経由では署名が失われるため `INVALID_ARGUMENT (400)` を防ぐためテキストで代替する。
+`--provider google` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` をテキスト形式に変換する。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT (400)` エラーを回避する。
 
 ## 開発
 

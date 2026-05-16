@@ -133,13 +133,6 @@ export async function handleMessages(c: Context): Promise<Response> {
   const toolChoice = isServerToolChoice ? undefined : toToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
-  // Gemini thinking モデルは tool call に thought_signature を付与するが、
-  // Anthropic フォーマットにその概念がないためマルチターンで署名が失われる。
-  // Google プロバイダー使用時は thinking を無効化して互換性を保つ。
-  const googleProviderOptions = config.providerName === "google"
-    ? { google: { thinkingConfig: { thinkingBudget: 0 } } }
-    : undefined;
-
   const commonParams = {
     model: provider(model) as LanguageModelV1,
     messages,
@@ -150,7 +143,6 @@ export async function handleMessages(c: Context): Promise<Response> {
     tools,
     ...(toolChoice ? { toolChoice } : {}),
     maxSteps: 5,
-    ...(googleProviderOptions ? { providerOptions: googleProviderOptions } : {}),
   };
 
   // ストリーミング
