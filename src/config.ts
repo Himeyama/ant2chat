@@ -62,11 +62,15 @@ function resolveProvider(): string {
 
 function resolveBaseURL(provider: string): string {
   if (values.url) return String(values.url);
-  if (process.env.CHAT_BASE_URL) return process.env.CHAT_BASE_URL;
-  if (!(provider in PROVIDER_URLS)) {
-    throw new Error(`Unknown provider: "${provider}". Available: ${Object.keys(PROVIDER_URLS).join(", ")}`);
+  if (values.provider) {
+    // --provider を明示した場合はそのプロバイダーの URL を優先 (CHAT_BASE_URL より上)
+    if (!(provider in PROVIDER_URLS)) {
+      throw new Error(`Unknown provider: "${provider}". Available: ${Object.keys(PROVIDER_URLS).join(", ")}`);
+    }
+    return PROVIDER_URLS[provider];
   }
-  return PROVIDER_URLS[provider];
+  if (process.env.CHAT_BASE_URL) return process.env.CHAT_BASE_URL;
+  return PROVIDER_URLS[provider]; // ollama デフォルト
 }
 
 export type AuthType = "bearer" | "api-key";
