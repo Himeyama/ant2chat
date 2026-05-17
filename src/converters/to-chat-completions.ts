@@ -18,13 +18,8 @@ function strictifySchema(node: Record<string, unknown>): Record<string, unknown>
       out[k] = strictifySchema(v as Record<string, unknown>);
     }
     result.properties = out;
-    // 元スキーマの required を尊重。ただし properties に存在するキーのみに絞る
-    const defined = new Set(Object.keys(out));
-    if (Array.isArray(result.required)) {
-      result.required = (result.required as string[]).filter((k) => defined.has(k));
-    } else {
-      result.required = [];
-    }
+    // additionalProperties:false のとき OpenAI strict モードは required に全キーを要求する
+    result.required = Object.keys(out);
     result.additionalProperties = false;
   }
   // additionalProperties がスキーマオブジェクト（辞書/マップ型）の場合は空オブジェクトに変換する
