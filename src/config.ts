@@ -18,6 +18,7 @@ const { values } = parseArgs({
     "auth-type": { type: "string" },
     model:       { type: "string",  short: "m" },
     global:      { type: "boolean", short: "g" },
+    "no-search": { type: "boolean" },
     help:        { type: "boolean", short: "h" },
   },
   strict: false,
@@ -38,6 +39,7 @@ Options:
       --auth-type <type>  Auth header type: bearer | api-key (default: bearer)
   -m, --model <model>     Force model name (overrides client's model field)
   -g, --global            Listen on 0.0.0.0 (expose to network)
+      --no-search         Disable built-in web search tool
   -h, --help              Show this help
 
 Environment variables (overridden by CLI options):
@@ -49,6 +51,7 @@ Environment variables (overridden by CLI options):
   GOOGLE_GENERATIVE_AI_API_KEY   API key fallback when --provider google is used
   CHAT_AUTH_TYPE                 Auth header type
   CHAT_DEFAULT_MODEL             Default model name
+  NO_SEARCH                      Disable built-in web search tool (set to "1" or "true")
 `);
   process.exit(0);
 }
@@ -61,8 +64,7 @@ function resolveBaseURL(provider: string): string {
   if (values.url) return String(values.url);
   if (process.env.CHAT_BASE_URL) return process.env.CHAT_BASE_URL;
   if (!(provider in PROVIDER_URLS)) {
-    console.error(`Unknown provider: "${provider}". Available: ${Object.keys(PROVIDER_URLS).join(", ")}`);
-    process.exit(1);
+    throw new Error(`Unknown provider: "${provider}". Available: ${Object.keys(PROVIDER_URLS).join(", ")}`);
   }
   return PROVIDER_URLS[provider];
 }
@@ -85,13 +87,24 @@ const providerName = resolveProvider();
 // --url で明示指定した URL のみ。CHAT_BASE_URL は他プロバイダー向けのため Google/Gemini には適用しない
 const customBaseURL = values.url ? String(values.url) : undefined;
 
+let resolvedBaseURL: string;
+try {
+  resolvedBaseURL = resolveBaseURL(providerName);
+} catch (err) {
+  console.error(`\x1b[31mError: ${(err as Error).message}\x1b[0m`);
+  process.exit(1);
+}
+
+const noSearchEnv = process.env.NO_SEARCH === "1" || process.env.NO_SEARCH === "true";
+
 export const config = {
   providerName,
-  baseURL:       resolveBaseURL(providerName),
+  baseURL:       resolvedBaseURL,
   customBaseURL,
   port:          Number(values.port        ?? process.env.PORT               ?? 3000),
   global:        Boolean(values.global),
   apiKey:        resolveApiKey(providerName),
   authType:      String(values["auth-type"] ?? process.env.CHAT_AUTH_TYPE    ?? "bearer") as AuthType,
   defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? ""),
+  noSearch:      Boolean(values["no-search"]) || noSearchEnv,
 };

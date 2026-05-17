@@ -53,14 +53,16 @@ class RateLimiter {
   constructor(private readonly max: number, private readonly windowMs: number) {}
 
   async acquire(): Promise<void> {
-    const now = Date.now();
-    this.timestamps = this.timestamps.filter((t) => now - t < this.windowMs);
-    if (this.timestamps.length >= this.max) {
+    while (true) {
+      const now = Date.now();
+      this.timestamps = this.timestamps.filter((t) => now - t < this.windowMs);
+      if (this.timestamps.length < this.max) {
+        this.timestamps.push(now);
+        return;
+      }
       const waitMs = this.windowMs - (now - this.timestamps[0]) + 10;
       await new Promise((r) => setTimeout(r, waitMs));
-      return this.acquire();
     }
-    this.timestamps.push(now);
   }
 }
 

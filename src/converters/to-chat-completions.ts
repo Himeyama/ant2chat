@@ -7,7 +7,7 @@ const DISALLOWED_KEYWORDS = new Set([
   "propertyNames", "if", "then", "else", "not", "contains", "patternProperties", "format",
 ]);
 
-// strict モード: 全オブジェクトに additionalProperties:false と全キーの required を再帰的に付与する
+// strict モード: 全オブジェクトに additionalProperties:false を付与し、元の required を尊重する
 function strictifySchema(node: Record<string, unknown>): Record<string, unknown> {
   const result = { ...node };
   for (const key of DISALLOWED_KEYWORDS) delete result[key];
@@ -18,7 +18,13 @@ function strictifySchema(node: Record<string, unknown>): Record<string, unknown>
       out[k] = strictifySchema(v as Record<string, unknown>);
     }
     result.properties = out;
-    result.required = Object.keys(props);
+    // 元スキーマの required を尊重。ただし properties に存在するキーのみに絞る
+    const defined = new Set(Object.keys(out));
+    if (Array.isArray(result.required)) {
+      result.required = (result.required as string[]).filter((k) => defined.has(k));
+    } else {
+      result.required = [];
+    }
     result.additionalProperties = false;
   }
   // additionalProperties がスキーマオブジェクト（辞書/マップ型）の場合は空オブジェクトに変換する

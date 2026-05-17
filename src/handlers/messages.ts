@@ -83,11 +83,11 @@ function toProviderOptions(
 }
 
 function makeMessageId(): string {
-  return `msg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  return `msg_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 function makeToolUseId(): string {
-  return `toolu_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 9)}`;
+  return `toolu_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
 function extractUpstreamError(err: unknown): { type: string; message: string; statusCode: number } {
@@ -141,7 +141,7 @@ export async function handleMessages(c: Context): Promise<Response> {
     return c.json({ type: "error", error: { type: "invalid_request_error", message: "Invalid JSON" } }, 400);
   }
 
-  const apiKey = config.apiKey || c.req.header("x-api-key") || "no-key";
+  const apiKey = config.apiKey || c.req.header("x-api-key") || "";
   const provider = getProvider(apiKey);
   const model = resolveModel(body.model);
 
@@ -166,10 +166,15 @@ export async function handleMessages(c: Context): Promise<Response> {
   const clientTools = isGoogleProvider(config.providerName)
     ? toGeminiTools(body.tools)
     : toChatCompletionsTools(body.tools);
-  // WebSearch はクライアント定義を上書きしてサーバー側で実行する
-  const tools: ToolSet = { ...clientTools, "google_search": googleSearchTool, "WebSearch": googleSearchTool };
-  // サーバー側で内部処理するツール名: クライアントには公開しない
-  const serverToolNames = new Set(["google_search", "WebSearch"]);
+  // サーバー側ツールは --no-search / NO_SEARCH=1 で無効化できる
+  const serverToolNames = new Set<string>();
+  const tools: ToolSet = { ...clientTools };
+  if (!config.noSearch) {
+    tools["google_search"] = googleSearchTool;
+    tools["WebSearch"] = googleSearchTool;
+    serverToolNames.add("google_search");
+    serverToolNames.add("WebSearch");
+  }
   // サーバー側ツールを指定した tool_choice は全ステップに伝播して無限ループになるため無視する
   const isServerToolChoice =
     body.tool_choice != null &&

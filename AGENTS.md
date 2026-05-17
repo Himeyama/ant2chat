@@ -54,6 +54,7 @@ Options:
       --auth-type <type>  認証ヘッダー形式: bearer | api-key (デフォルト: bearer)
   -m, --model <model>     モデル名を強制指定 (クライアントの model フィールドを上書き)
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
+      --no-search         組み込み Web 検索ツールを無効化
   -h, --help              ヘルプを表示
 ```
 
@@ -73,6 +74,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `GOOGLE_GENERATIVE_AI_API_KEY` | 任意 | `--provider google` / `--provider gemini` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 任意 | 認証ヘッダー形式: bearer \| api-key |
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
+| `NO_SEARCH` | 任意 | `1` または `true` で組み込み Web 検索ツールを無効化 |
 
 ## コマンド
 
