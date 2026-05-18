@@ -47,7 +47,7 @@ src/
 ant2chat [options]
 
 Options:
-      --provider <name>   上流プロバイダー: ollama | openai | responses | openrouter | google | gemini (デフォルト: ollama)
+      --provider <name>   上流プロバイダー: ollama | openai | responses | openrouter | google | gemini | azure (デフォルト: ollama)
   -u, --url <url>         上流ベース URL。--provider 省略時は URL からプロバイダーを自動判定
   -p, --port <port>       Listen ポート (デフォルト: 3000)
   -k, --api-key <key>     上流 API キー
@@ -72,6 +72,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `OPENAI_API_KEY` | 任意 | `--provider openai` / `--provider responses` 使用時の API キーフォールバック |
 | `OPENROUTER_API_KEY` | 任意 | `--provider openrouter` 使用時の API キーフォールバック |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | 任意 | `--provider google` / `--provider gemini` 使用時の API キーフォールバック |
+| `AZURE_OPENAI_API_KEY` | 任意 | `--provider azure` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 任意 | 認証ヘッダー形式: bearer \| api-key |
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | 任意 | `1` または `true` で組み込み Web 検索ツールを無効化 |

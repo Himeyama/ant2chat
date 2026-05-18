@@ -32,7 +32,7 @@ Usage:
   ant2chat [options]
 
 Options:
-      --provider <name>   Upstream provider: ollama | openai | responses | openrouter | google | gemini (default: ollama)
+      --provider <name>   Upstream provider: ollama | openai | responses | openrouter | google | gemini | azure (default: ollama)
   -u, --url <url>         Upstream base URL. Provider is auto-detected from the URL when --provider is omitted
   -p, --port <port>       Listen port (default: 3000)
   -k, --api-key <key>     Upstream API key
@@ -49,6 +49,7 @@ Environment variables (overridden by CLI options):
   OPENAI_API_KEY                 API key fallback when --provider openai/responses is used
   OPENROUTER_API_KEY             API key fallback when --provider openrouter is used
   GOOGLE_GENERATIVE_AI_API_KEY   API key fallback when --provider google is used
+  AZURE_OPENAI_API_KEY           API key fallback when --provider azure is used
   CHAT_AUTH_TYPE                 Auth header type
   CHAT_DEFAULT_MODEL             Default model name
   NO_SEARCH                      Disable built-in web search tool (set to "1" or "true")
@@ -57,6 +58,7 @@ Environment variables (overridden by CLI options):
 }
 
 const URL_PROVIDER_PATTERNS: Array<[RegExp, string]> = [
+  [/\.openai\.azure\.com/, "azure"],
   [/api\.openai\.com/, "openai"],
   [/openrouter\.ai/, "openrouter"],
   [/generativelanguage\.googleapis\.com/, "google"],
@@ -98,8 +100,9 @@ function resolveApiKey(provider: string): string {
   if ((provider === "openai" || provider === "responses") && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   if (provider === "openrouter" && process.env.OPENROUTER_API_KEY) return process.env.OPENROUTER_API_KEY;
   if ((provider === "google" || provider === "gemini") && process.env.GOOGLE_GENERATIVE_AI_API_KEY) return process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (provider !== "ollama" && provider !== "custom") {
-    console.warn(`\x1b[33mWarning: No API key specified. Set --api-key, CHAT_API_KEY, or (for --provider openai) OPENAI_API_KEY, (for --provider openrouter) OPENROUTER_API_KEY, (for --provider google/gemini) GOOGLE_GENERATIVE_AI_API_KEY.\x1b[0m`);
+  if (provider === "azure" && process.env.AZURE_OPENAI_API_KEY) return process.env.AZURE_OPENAI_API_KEY;
+  if (provider !== "ollama" && provider !== "custom" && provider !== "azure") {
+    console.warn(`\x1b[33mWarning: No API key specified. Set --api-key, CHAT_API_KEY, or (for --provider openai) OPENAI_API_KEY, (for --provider openrouter) OPENROUTER_API_KEY, (for --provider google/gemini) GOOGLE_GENERATIVE_AI_API_KEY, (for --provider azure) AZURE_OPENAI_API_KEY.\x1b[0m`);
   }
   return "";
 }
@@ -125,7 +128,7 @@ export const config = {
   port:          Number(values.port        ?? process.env.PORT               ?? 3000),
   global:        Boolean(values.global),
   apiKey:        resolveApiKey(providerName),
-  authType:      String(values["auth-type"] ?? process.env.CHAT_AUTH_TYPE    ?? "bearer") as AuthType,
+  authType:      (values["auth-type"] != null ? String(values["auth-type"]) : (process.env.CHAT_AUTH_TYPE ?? (providerName === "azure" ? "api-key" : "bearer"))) as AuthType,
   defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? ""),
   noSearch:      Boolean(values["no-search"]) || noSearchEnv,
 };

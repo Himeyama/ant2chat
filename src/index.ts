@@ -11,6 +11,7 @@ serve({ fetch: app.fetch, port, hostname }, () => {
   const apiLabel =
     providerName === "responses" ? "Responses API" :
     providerName === "google" || providerName === "gemini" ? "Gemini API" :
+    providerName === "azure" ? "Azure OpenAI" :
     providerName === "custom" ? "Custom (OpenAI-compatible)" :
     "Chat Completions";
   const displayHost = globalListen ? "0.0.0.0" : "localhost";

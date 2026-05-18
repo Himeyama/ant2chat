@@ -58,7 +58,7 @@ npm install -g ./ant2chat-0.1.0.tgz
 ant2chat [options]
 
 Options:
-      --provider <name>   上流プロバイダー: ollama | openai | responses | openrouter | google | gemini (デフォルト: ollama)
+      --provider <name>   上流プロバイダー: ollama | openai | responses | openrouter | google | gemini | azure (デフォルト: ollama)
   -u, --url <url>         上流ベース URL。--provider 省略時は URL からプロバイダーを自動判定
   -p, --port <port>       Listen ポート (デフォルト: 3000)
   -k, --api-key <key>     上流 API キー
@@ -83,6 +83,7 @@ CLI オプションで上書き可能。
 | `OPENAI_API_KEY` | `--provider openai` / `--provider responses` 使用時の API キーフォールバック |
 | `OPENROUTER_API_KEY` | `--provider openrouter` 使用時の API キーフォールバック |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | `--provider google` / `--provider gemini` 使用時の API キーフォールバック |
+| `AZURE_OPENAI_API_KEY` | `--provider azure` 使用時の API キーフォールバック |
 | `CHAT_AUTH_TYPE` | 認証ヘッダー形式 |
 | `PORT` | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | `1` または `true` で組み込み Web 検索ツールを無効化 |
@@ -121,7 +122,10 @@ ant2chat --provider responses --api-key sk-xxx --model gpt-5
 ant2chat --provider openrouter --api-key sk-or-xxx --model anthropic/claude-3.5-sonnet
 ant2chat --provider gemini --api-key AIzaSy-xxx --model gemini-2.0-flash
 ant2chat --provider google --api-key AIzaSy-xxx --model gemini-2.0-flash
+ant2chat --provider azure --api-key <key> -u https://<resource>.openai.azure.com/openai/deployments/<deployment> -m gpt-4o
 ant2chat -u http://localhost:11434/v1 -m llama3.2
+# Azure は URL 指定のみでも自動判定
+ant2chat -u https://<resource>.openai.azure.com/openai/deployments/<deployment> -k <key> -m gpt-4o
 ```
 
 ## 使い方
