@@ -107,9 +107,28 @@ function resolveApiKey(provider: string): string {
   return "";
 }
 
+// models/gemini-xxx:generateContent 形式の URL からベース URL とモデル名を分解する
+function parseGeminiModelURL(url: string): { baseURL: string; model: string } | null {
+  const match = url.match(/^(https?:\/\/.+?)\/models\/([^/:]+)(?::[a-zA-Z]+)?$/);
+  if (!match) return null;
+  return { baseURL: match[1], model: match[2] };
+}
+
 const providerName = resolveProvider();
 // --url で明示指定した URL のみ。CHAT_BASE_URL は他プロバイダー向けのため Google/Gemini には適用しない
-const customBaseURL = values.url ? String(values.url) : undefined;
+const rawCustomURL = values.url ? String(values.url) : undefined;
+
+// Google/Gemini かつ URL に /models/{model}: が含まれる場合は分解する
+const geminiParsed =
+  rawCustomURL && (providerName === "google" || providerName === "gemini")
+    ? parseGeminiModelURL(rawCustomURL)
+    : null;
+
+const customBaseURL = geminiParsed ? geminiParsed.baseURL : rawCustomURL;
+if (geminiParsed) {
+  // values.url を分解後の baseURL に差し替えて resolveBaseURL が正しい値を返すようにする
+  (values as Record<string, unknown>).url = geminiParsed.baseURL;
+}
 
 let resolvedBaseURL: string;
 try {
@@ -129,6 +148,6 @@ export const config = {
   global:        Boolean(values.global),
   apiKey:        resolveApiKey(providerName),
   authType:      (values["auth-type"] != null ? String(values["auth-type"]) : (process.env.CHAT_AUTH_TYPE ?? (providerName === "azure" ? "api-key" : "bearer"))) as AuthType,
-  defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? ""),
+  defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? geminiParsed?.model ?? ""),
   noSearch:      Boolean(values["no-search"]) || noSearchEnv,
 };

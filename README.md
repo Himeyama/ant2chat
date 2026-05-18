@@ -126,6 +126,8 @@ ant2chat --provider azure --api-key <key> -u https://<resource>.openai.azure.com
 ant2chat -u http://localhost:11434/v1 -m llama3.2
 # Azure は URL 指定のみでも自動判定
 ant2chat -u https://<resource>.openai.azure.com/openai/deployments/<deployment> -k <key> -m gpt-4o
+# Gemini は models/{model}:generateContent 形式の URL を直接指定可能 (ベース URL とモデル名を自動分解)
+ant2chat -u https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent -k AIzaSy-xxx
 ```
 
 ## 使い方
@@ -184,6 +186,14 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 ### Google / Gemini プロバイダーの制約
 
 `--provider google` / `--provider gemini` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` をテキスト形式に変換する。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT (400)` エラーを回避する。
+
+### Gemini: モデル付き URL の直接指定
+
+`-u` に `models/{model}:generateContent` 形式の URL を渡すと、ベース URL とモデル名を自動分解する。`-m` や `CHAT_DEFAULT_MODEL` が未指定の場合は URL 内のモデル名をそのまま使用する。
+
+```bash
+ant2chat -u https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent -k AIzaSy-xxx
+```
 
 ## 開発
 

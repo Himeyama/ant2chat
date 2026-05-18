@@ -127,6 +127,10 @@ pnpm start      # ビルド済みファイルで起動
 
 `--provider google` / `--provider gemini` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` を `functionCall` パーツではなくテキストに変換する (`flattenToolHistory`)。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT` エラーを回避する。
 
+### Gemini: モデル付き URL の自動分解
+
+`-u` に `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent` のような `models/{model}:generateContent` 形式の URL を渡すと、`config.ts` の `parseGeminiModelURL()` がベース URL (`/v1beta` まで) とモデル名を分解する。`createGoogleGenerativeAI` には分解後のベース URL を渡すため、SDK の URL 組み立て (`{baseURL}/models/{model}:generateContent`) が正常に動作する。`-m` / `CHAT_DEFAULT_MODEL` が未指定の場合は URL 内のモデル名を `defaultModel` に設定する。
+
 ## 変換ルール
 
 ### リクエスト (Anthropic → OpenAI)
