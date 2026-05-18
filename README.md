@@ -1,5 +1,7 @@
 # ant2chat
 
+![](docs/system.drawio.png)
+
 Anthropic Messages API (`/v1/messages`) を受け取り、OpenAI 互換の Chat Completions API へ変換して転送するプロキシサーバー。
 
 Claude Code などの Anthropic クライアントを、Ollama・LM Studio・vLLM などの OpenAI 互換バックエンドに接続できる。
