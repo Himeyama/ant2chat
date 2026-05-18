@@ -19,5 +19,9 @@ serve({ fetch: app.fetch, port, hostname }, () => {
   console.log(`  Provider:  ${providerName}`);
   if (baseURL) console.log(`  Upstream:  ${baseURL}`);
   console.log(`  Auth type: ${authType}`);
-  if (defaultModel) console.log(`  Model:     ${defaultModel} (forced)`);
+  if (defaultModel) {
+    console.log(`  Model:     ${defaultModel} (forced)`);
+  } else {
+    console.log(`  Model:     (client-specified)`);
+  }
 });
