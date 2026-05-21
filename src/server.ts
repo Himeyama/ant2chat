@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { handleMessages } from "./handlers/messages.js";
+import { handleResponses } from "./handlers/responses.js";
 
 // ANSI カラーコード
 const C = {
@@ -63,6 +64,9 @@ export function createApp() {
 
   // Anthropic Messages API エンドポイント
   app.post("/v1/messages", handleMessages);
+
+  // OpenAI Responses API エンドポイント
+  app.post("/v1/responses", handleResponses);
 
   // 未定義ルート
   app.notFound((c) => c.json({ type: "error", error: { type: "not_found_error", message: "Not found" } }, 404));

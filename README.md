@@ -2,9 +2,9 @@
 
 ![](docs/system.drawio.png)
 
-Anthropic Messages API (`/v1/messages`) を受け取り、OpenAI 互換の Chat Completions API へ変換して転送するプロキシサーバー。
+Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/responses`) を受け取り、上流の Chat Completions API へ変換して転送するプロキシサーバー。
 
-Claude Code などの Anthropic クライアントを、Ollama・LM Studio・vLLM などの OpenAI 互換バックエンドに接続できる。
+Claude Code などの Anthropic クライアントや OpenAI Responses API クライアントを、Ollama・LM Studio・vLLM などの OpenAI 互換バックエンドに接続できる。
 
 ## インストール
 
@@ -156,6 +156,16 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 |---|---|---|
 | `GET` | `/` | ヘルスチェック。`{"status":"ok"}` を返す |
 | `POST` | `/v1/messages` | Anthropic Messages API 互換エンドポイント |
+| `POST` | `/v1/responses` | OpenAI Responses API 互換エンドポイント |
+
+### `/v1/responses` について
+
+OpenAI Responses API 形式でリクエストを受け取り、上流へは Chat Completions として転送し、Responses API 形式でレスポンスを返す。
+
+- `input` に文字列または入力アイテムの配列を指定する。アイテムには通常メッセージ・`function_call`・`function_call_output` を混在できる
+- `instructions` がシステムプロンプトとして機能する
+- `stream: true` で SSE ストリーミングに対応。`response.created` → `response.output_text.delta` → `response.completed` 等の標準イベントを送出する
+- ツール呼び出し結果は `output` 配列内の `function_call` アイテムとして返される
 
 ### サポートしているリクエストフィールド
 
@@ -210,17 +220,18 @@ pnpm start    # ビルド済みで起動
 ```
 クライアント
   │  POST /v1/messages (Anthropic 形式)
+  │  POST /v1/responses (OpenAI Responses API 形式)
   ▼
 [Hono サーバー]
-  │  リクエスト変換 (Anthropic → OpenAI)
+  │  リクエスト変換 → CoreMessage
   ▼
 [Vercel AI SDK]  generateText / streamText
   │
   ▼
 上流 OpenAI 互換エンドポイント (CHAT_BASE_URL)
-  │  レスポンス変換 (OpenAI → Anthropic)
+  │  レスポンス変換
   ▼
-クライアントへ返却 (Anthropic 形式 / SSE)
+クライアントへ返却 (Anthropic 形式 / Responses API 形式 / SSE)
 ```
 
 ## ライセンス

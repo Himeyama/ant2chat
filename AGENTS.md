@@ -1,6 +1,6 @@
 # ant2chat
 
-Anthropic Messages API (`/v1/messages`) を受け取り、OpenAI 互換の Chat Completions API へ変換して転送するプロキシサーバー。
+Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/responses`) を受け取り、上流の Chat Completions API へ変換して転送するプロキシサーバー。
 
 ## ドキュメント更新ルール
 
@@ -11,34 +11,50 @@ Anthropic Messages API (`/v1/messages`) を受け取り、OpenAI 互換の Chat 
 ```
 クライアント
   │  POST /v1/messages (Anthropic 形式)
+  │  POST /v1/responses (OpenAI Responses API 形式)
   ▼
 [Hono サーバー]  src/server.ts
   │
-  ▼
-[handleMessages]  src/handlers/messages.ts
-  │  リクエスト変換
-  ▼
-[toOpenAIMessages / toOpenAITools / toOpenAIToolChoice]  src/converters/to-openai.ts
+  ├─ handleMessages  src/handlers/messages.ts
+  │    │  リクエスト変換 (Anthropic → CoreMessage)
+  │    ▼
+  │  [toMessages / toChatCompletionsTools / toGeminiTools]  src/converters/
+  │
+  └─ handleResponses  src/handlers/responses.ts
+       │  リクエスト変換 (Responses API → CoreMessage)
+       ▼
+     [toMessagesFromResponses / toToolsFromResponses]  src/converters/from-responses.ts
+  │
+  │  共通プロバイダー  src/handlers/provider.ts
   │  Vercel AI SDK (ai / @ai-sdk/openai / @ai-sdk/google)
   ▼
-上流エンドポイント (OpenAI 互換: CHAT_BASE_URL / Google Gemini API)
+上流エンドポイント (Chat Completions / Google Gemini API)
   │  レスポンス変換
   ▼
-クライアントへ返却 (Anthropic 形式 / SSE)
+クライアントへ返却 (Anthropic 形式 / Responses API 形式 / SSE)
 ```
 
 ## ファイル構成
 
 ```
 src/
-├── index.ts                  # エントリポイント。@hono/node-server で Listen
-├── server.ts                 # Hono アプリ定義。ルーティングのみ
+├── index.ts                     # エントリポイント。@hono/node-server で Listen
+├── server.ts                    # Hono アプリ定義。ルーティングのみ
+├── config.ts                    # CLI オプション・環境変数の解決
 ├── handlers/
-│   └── messages.ts           # POST /v1/messages の処理。ストリーム・非ストリーム両対応
+│   ├── messages.ts              # POST /v1/messages の処理。ストリーム・非ストリーム両対応
+│   ├── responses.ts             # POST /v1/responses の処理。Responses API 互換
+│   └── provider.ts              # getProvider / resolveModel / extractUpstreamError など共通ユーティリティ
 ├── converters/
-│   └── to-openai.ts          # Anthropic → CoreMessage / ToolSet / ToolChoice への変換
+│   ├── shared.ts                # toMessages / toToolChoice / filterSystem など共通変換
+│   ├── to-chat-completions.ts   # Anthropic ツール定義 → Chat Completions ToolSet
+│   ├── to-gemini.ts             # Anthropic ツール定義 → Gemini ToolSet
+│   └── from-responses.ts        # Responses API 入力 → CoreMessage / ToolSet / ToolChoice
+├── tools/
+│   └── google-search.ts         # 組み込み Web 検索ツール
 └── types/
-    └── anthropic.ts          # Anthropic API の型定義 (Request / Response / SSE イベント / Tool)
+    ├── anthropic.ts             # Anthropic API の型定義 (Request / Response / SSE イベント / Tool)
+    └── openai-responses.ts      # OpenAI Responses API の型定義 (Request / Response / SSE イベント)
 ```
 
 ## CLI オプション
@@ -93,6 +109,7 @@ pnpm start      # ビルド済みファイルで起動
 |---|---|---|
 | `GET` | `/` | ヘルスチェック。`{"status":"ok"}` を返す |
 | `POST` | `/v1/messages` | Anthropic Messages API 互換エンドポイント |
+| `POST` | `/v1/responses` | OpenAI Responses API 互換エンドポイント |
 
 ### `/v1/messages` の動作
 
@@ -115,9 +132,35 @@ pnpm start      # ビルド済みファイルで起動
 - **OpenAI / responses**: `providerOptions.openai.reasoningEffort` に変換。`budget_tokens` を段階へマッピング (`< 8192` → `low`、`< 24576` → `medium`、それ以上 → `high`)。`responses` プロバイダーでは加えて `reasoningSummary: "auto"` を設定し思考要約を有効化。`disabled` 時は何も設定しない
 - **ollama / その他**: `thinking` は無視 (reasoning モデルはモデル側で出力を制御するため)
 
+### `/v1/responses` の動作
+
+OpenAI Responses API 互換エンドポイント。クライアントから Responses API 形式でリクエストを受け取り、上流へは Chat Completions として転送し、レスポンスを Responses API 形式で返す。
+
+- `stream: false` (省略時) → 同期レスポンス。`{ object: "response", output: [...] }` 形式
+- `stream: true` → SSE ストリーム。イベント順は OpenAI Responses API 仕様に準拠:
+  - テキスト: `response.created` → `response.output_item.added` → `response.content_part.added` → `response.output_text.delta` (×N) → `response.output_text.done` → `response.content_part.done` → `response.output_item.done` → `response.completed`
+  - ツール呼び出し: `response.output_item.added` → `response.function_call_arguments.delta` (×N) → `response.function_call_arguments.done` → `response.output_item.done`
+
+#### サポートしているリクエストフィールド
+
+`model` / `input` (文字列 or 配列) / `instructions` / `stream` / `temperature` / `top_p` / `max_output_tokens` / `stop` / `tools` / `tool_choice`
+
+#### 入力形式 (`input`)
+
+- 文字列: `user` メッセージとして扱う
+- 配列: 以下の要素を含む
+  - `{ role: "user"|"assistant"|"system", content: "..." | [...parts] }` — 通常メッセージ
+  - `{ type: "function_call", id, call_id, name, arguments }` — 過去のツール呼び出し (連続する場合は assistant ツール呼び出しメッセージにまとめる)
+  - `{ type: "function_call_output", call_id, output }` — ツール呼び出し結果 (tool メッセージに変換)
+
+#### 出力形式 (`output`)
+
+- `{ type: "message", id, role: "assistant", status, content: [{ type: "output_text", text, annotations: [] }] }` — テキスト出力
+- `{ type: "function_call", id, call_id, name, arguments, status }` — ツール呼び出し
+
 ### OpenAI Responses API プロバイダー
 
-`--provider responses` 使用時、`getProvider()` が返す OpenAI プロバイダーの `.responses(model)` を使い、上流を Chat Completions ではなく Responses API (`/v1/responses`) に転送する (`isResponsesProvider()` で判定)。ベース URL は `https://api.openai.com/v1`。reasoning モデルの思考出力は `thinking` / `redacted_thinking` ブロックに変換する (下記「変換ルール」参照)。
+`--provider responses` 使用時、`getLanguageModel()` が返す OpenAI プロバイダーの `.responses(model)` を使い、上流を Chat Completions ではなく Responses API (`/v1/responses`) に転送する (`isResponsesProvider()` で判定)。ベース URL は `https://api.openai.com/v1`。reasoning モデルの思考出力は `thinking` / `redacted_thinking` ブロックに変換する (下記「変換ルール」参照)。
 
 ### OpenRouter プロバイダー
 
@@ -291,7 +334,7 @@ $env:CHAT_API_KEY="sk-xxx"; $env:CHAT_BASE_URL="https://api.example.com/v1"; ant
 
 ## 拡張ポイント
 
-- **別プロバイダーへの対応**: `src/handlers/messages.ts` の `getProvider()` を差し替える
+- **別プロバイダーへの対応**: `src/handlers/provider.ts` の `getProvider()` を差し替える
 - **`tool_result` 内の画像対応**: `toolResultContentToString` を拡張し、`tool_result` の `content` に含まれる画像ブロックを処理する
 - **認証**: `src/server.ts` に Hono ミドルウェアを追加して `x-api-key` ヘッダーを検証する
 - **ロギング**: `src/server.ts` の `createApp()` に `logger()` ミドルウェア (`hono/logger`) を追加する

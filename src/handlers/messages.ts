@@ -1,5 +1,4 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, streamText, type JSONValue, type LanguageModelV1, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
@@ -8,6 +7,14 @@ import { filterSystemForNonClaudeModel, toMessages, toToolChoice } from "../conv
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
+import {
+  isGoogleProvider,
+  isResponsesProvider,
+  getProvider,
+  resolveModel,
+  stripEmptyStringValues,
+  extractUpstreamError,
+} from "./provider.js";
 import type {
   AnthropicRequest,
   AnthropicResponse,
@@ -16,34 +23,6 @@ import type {
   AnthropicStreamEvent,
   AnthropicThinkingConfig,
 } from "../types/anthropic.js";
-
-function isGoogleProvider(providerName: string): boolean {
-  return providerName === "google" || providerName === "gemini";
-}
-
-function isResponsesProvider(providerName: string): boolean {
-  return providerName === "responses";
-}
-
-function getProvider(apiKey: string) {
-  const { baseURL, customBaseURL, authType, providerName } = config;
-  if (isGoogleProvider(providerName)) {
-    return createGoogleGenerativeAI({ apiKey, ...(customBaseURL ? { baseURL: customBaseURL } : {}) });
-  }
-  if (authType === "api-key") {
-    return createOpenAI({
-      apiKey: "no-key",
-      baseURL,
-      headers: { "api-key": apiKey },
-      compatibility: "compatible",
-    });
-  }
-  return createOpenAI({ apiKey, baseURL, compatibility: "compatible" });
-}
-
-function resolveModel(requestedModel: string): string {
-  return config.defaultModel || requestedModel;
-}
 
 // budget_tokens を OpenAI の reasoningEffort (low/medium/high) にマッピングする
 function budgetToReasoningEffort(budget: number): "low" | "medium" | "high" {
@@ -90,33 +69,6 @@ function makeToolUseId(): string {
   return `toolu_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-function extractUpstreamError(err: unknown): { type: string; message: string; statusCode: number } {
-  if (err && typeof err === "object") {
-    const e = err as Record<string, unknown>;
-    const statusCode = typeof e.statusCode === "number" ? e.statusCode : 502;
-    const data = e.data as Record<string, unknown> | undefined;
-    const upstreamError = data?.error as Record<string, unknown> | undefined;
-    if (upstreamError) {
-      return {
-        type: typeof upstreamError.type === "string" ? upstreamError.type : "api_error",
-        message: typeof upstreamError.message === "string" ? upstreamError.message : String(err),
-        statusCode,
-      };
-    }
-    const message = typeof e.message === "string" ? e.message : "Upstream error";
-    return { type: "api_error", message, statusCode };
-  }
-  return { type: "api_error", message: "Upstream error", statusCode: 502 };
-}
-
-function stripEmptyStringValues(args: unknown): Record<string, unknown> {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return (args ?? {}) as Record<string, unknown>;
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args as Record<string, unknown>)) {
-    if (value !== "") result[key] = value;
-  }
-  return result;
-}
 
 function mapFinishReason(
   finishReason: string,
