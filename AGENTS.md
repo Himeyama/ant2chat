@@ -120,7 +120,9 @@ pnpm start      # ビルド済みファイルで起動
 
 ### サポートしているリクエストフィールド
 
-`model` / `messages` / `system` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice` / `thinking`
+`model` / `messages` / `system` / `max_tokens` / `max_completion_tokens` / `stream` / `temperature` / `top_p` / `stop_sequences` / `tools` / `tool_choice` / `thinking`
+
+`max_tokens` と `max_completion_tokens` はどちらも `maxTokens` へマッピングされる。両方指定した場合は `max_tokens` が優先される。
 
 未サポート: `top_k`、画像コンテンツ (`image` ブロックはテキスト変換時に無視される)
 
