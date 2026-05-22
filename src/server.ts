@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { handleMessages } from "./handlers/messages.js";
 import { handleResponses } from "./handlers/responses.js";
 import { usagePage } from "./usage-page.js";
+import { messagesTestPage } from "./messages-test-page.js";
+import { responsesTestPage } from "./responses-test-page.js";
 
 // ANSI カラーコード
 const C = {
@@ -69,8 +71,26 @@ export function createApp() {
     return c.json({ status: "ok" });
   });
 
+  // GET /v1/messages → ブラウザにはテストページ
+  app.get("/v1/messages", (c) => {
+    const accept = c.req.header("accept") ?? "";
+    if (accept.includes("text/html")) {
+      return c.html(messagesTestPage);
+    }
+    return c.json({ status: "ok" });
+  });
+
   // Anthropic Messages API エンドポイント
   app.post("/v1/messages", handleMessages);
+
+  // GET /v1/responses → ブラウザにはテストページ
+  app.get("/v1/responses", (c) => {
+    const accept = c.req.header("accept") ?? "";
+    if (accept.includes("text/html")) {
+      return c.html(responsesTestPage);
+    }
+    return c.json({ status: "ok" });
+  });
 
   // OpenAI Responses API エンドポイント
   app.post("/v1/responses", handleResponses);
