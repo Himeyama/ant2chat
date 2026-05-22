@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { handleMessages } from "./handlers/messages.js";
 import { handleResponses } from "./handlers/responses.js";
+import { usagePage } from "./usage-page.js";
 
 // ANSI カラーコード
 const C = {
@@ -59,8 +60,14 @@ export function createApp() {
     await next();
   });
 
-  // ヘルスチェック
-  app.get("/", (c) => c.json({ status: "ok" }));
+  // ブラウザには使用法ページ、API クライアントにはヘルスチェック JSON を返す
+  app.get("/", (c) => {
+    const accept = c.req.header("accept") ?? "";
+    if (accept.includes("text/html")) {
+      return c.html(usagePage);
+    }
+    return c.json({ status: "ok" });
+  });
 
   // Anthropic Messages API エンドポイント
   app.post("/v1/messages", handleMessages);

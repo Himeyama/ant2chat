@@ -111,7 +111,7 @@ pnpm start      # ビルド済みファイルで起動
 
 | メソッド | パス | 説明 |
 |---|---|---|
-| `GET` | `/` | ヘルスチェック。`{"status":"ok"}` を返す |
+| `GET` | `/` | ブラウザからは使用法ページ (HTML) を返す。API クライアントからは `{"status":"ok"}` を返す |
 | `POST` | `/v1/messages` | Anthropic Messages API 互換エンドポイント |
 | `POST` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (HTTP) |
 | `WS` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (WebSocket) |
