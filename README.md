@@ -100,13 +100,6 @@ export CHAT_API_KEY=sk-xxx
 ant2chat
 ```
 
-または `.env` ファイルを作成して開発モードで使う:
-
-```bash
-cp .env.example .env
-# .env を編集してから
-pnpm dev
-```
 
 **Windows (PowerShell)**
 

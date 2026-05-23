@@ -105,7 +105,7 @@ pnpm build      # TypeScript コンパイル → dist/
 pnpm start      # ビルド済みファイルで起動
 ```
 
-開発時は `tsx` が `.env` を自動で読み込む。本番時は `node --env-file=.env dist/index.js` を使うこと。
+`.env` ファイルは読み込まない。環境変数はシェルから直接渡すこと。
 
 ## エンドポイント
 
