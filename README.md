@@ -2,9 +2,9 @@
 
 ![](docs/system.drawio.png)
 
-Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/responses`) を受け取り、上流の Chat Completions API へ変換して転送するプロキシサーバー。
+Anthropic Messages API (`/v1/messages`)、OpenAI Responses API (`/v1/responses`)、OpenAI Chat Completions API (`/v1/chat/completions`) を受け取り、上流の Chat Completions API / Google Gemini API へ変換して転送するプロキシサーバー。
 
-Claude Code などの Anthropic クライアントや OpenAI Responses API クライアントを、Ollama・LM Studio・vLLM などの OpenAI 互換バックエンドに接続できる。
+Claude Code などの Anthropic クライアント、OpenAI Responses API クライアント、OpenAI Chat Completions クライアントを、Ollama・LM Studio・vLLM などの OpenAI 互換バックエンドや Google Gemini に接続できる。
 
 ## インストール
 
@@ -151,6 +151,22 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 | `POST` | `/v1/messages` | Anthropic Messages API 互換エンドポイント |
 | `POST` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (HTTP) |
 | `WS` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (WebSocket) |
+| `POST` | `/v1/chat/completions` | OpenAI Chat Completions API 互換エンドポイント |
+
+### `/v1/chat/completions` について
+
+OpenAI Chat Completions 形式でリクエストを受け取る。上流プロバイダーによって動作が変わる。
+
+- **Chat Completions 互換の上流 (ollama / openai / responses / openrouter / azure / custom)**: 変換せずそのまま上流の `/chat/completions` へ転送する (パススルー)。`stream: true` の SSE もそのまま中継し、SDK 非対応のフィールドも透過する
+- **Gemini (`--provider google` / `--provider gemini`)**: Chat Completions 非互換のため変換して転送し、`chat.completion` / `chat.completion.chunk` 形式で返す。ツール呼び出し・組み込み Web 検索にも対応
+- いずれの場合も `--model` / `CHAT_DEFAULT_MODEL` の強制指定が優先される (パススルーでもボディの `model` を書き換える)
+
+```bash
+# OpenAI Chat Completions クライアントをそのまま接続 (パススルー)
+ant2chat --provider openai -k sk-xxx
+# Gemini を Chat Completions 形式で利用 (変換)
+ant2chat --provider gemini -k AIzaSy-xxx -m gemini-2.0-flash
+```
 
 ### `/v1/responses` について
 
@@ -217,19 +233,21 @@ pnpm start    # ビルド済みで起動
 
 ```
 クライアント
-  │  POST /v1/messages (Anthropic 形式)
-  │  POST /v1/responses (OpenAI Responses API 形式)
+  │  POST /v1/messages          (Anthropic 形式)
+  │  POST /v1/responses         (OpenAI Responses API 形式)
+  │  POST /v1/chat/completions  (OpenAI Chat Completions 形式)
   ▼
 [Hono サーバー]
   │  リクエスト変換 → CoreMessage
+  │  (/v1/chat/completions かつ互換上流の場合はパススルー)
   ▼
 [Vercel AI SDK]  generateText / streamText
   │
   ▼
-上流 OpenAI 互換エンドポイント (CHAT_BASE_URL)
+上流 OpenAI 互換エンドポイント / Google Gemini API (CHAT_BASE_URL)
   │  レスポンス変換
   ▼
-クライアントへ返却 (Anthropic 形式 / Responses API 形式 / SSE)
+クライアントへ返却 (Anthropic 形式 / Responses API 形式 / Chat Completions 形式 / SSE)
 ```
 
 ## エージェントコーディングツールでの使用例

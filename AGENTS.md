@@ -1,6 +1,6 @@
 # ant2chat
 
-Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/responses`) を受け取り、上流の Chat Completions API へ変換して転送するプロキシサーバー。
+Anthropic Messages API (`/v1/messages`)、OpenAI Responses API (`/v1/responses`)、OpenAI Chat Completions API (`/v1/chat/completions`) を受け取り、上流の Chat Completions API / Google Gemini API へ変換して転送するプロキシサーバー。
 
 ## ドキュメント更新ルール
 
@@ -10,9 +10,10 @@ Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/res
 
 ```
 クライアント
-  │  POST /v1/messages (Anthropic 形式)
-  │  POST /v1/responses (HTTP)
-  │  WS   /v1/responses (WebSocket)
+  │  POST /v1/messages          (Anthropic 形式)
+  │  POST /v1/responses         (HTTP)
+  │  WS   /v1/responses         (WebSocket)
+  │  POST /v1/chat/completions  (OpenAI Chat Completions 形式)
   ▼
 [Hono サーバー]  src/server.ts
   │
@@ -23,10 +24,16 @@ Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/res
   │
   ├─ handleResponses  src/handlers/responses.ts  (HTTP POST)
   │    │
-  └─ handleResponsesWs  src/handlers/responses-ws.ts  (WebSocket upgrade)
-       │  リクエスト変換 (Responses API → CoreMessage)  ← emitStreamingLoop を共有
+  ├─ handleResponsesWs  src/handlers/responses-ws.ts  (WebSocket upgrade)
+  │    │  リクエスト変換 (Responses API → CoreMessage)  ← emitStreamingLoop を共有
+  │    ▼
+  │  [toMessagesFromResponses / toToolsFromResponses]  src/converters/from-responses.ts
+  │
+  └─ handleChatCompletions  src/handlers/chat-completions.ts
+       │  ・Chat Completions 互換の上流 → そのままパススルー (fetch で生転送)
+       │  ・Gemini → 変換 (CC → Anthropic → CoreMessage、出力を CC 形式に再構築)
        ▼
-     [toMessagesFromResponses / toToolsFromResponses]  src/converters/from-responses.ts
+     [chatMessagesToAnthropic / chatToolsToAnthropic]  src/converters/from-chat-completions.ts
   │
   │  共通プロバイダー  src/handlers/provider.ts
   │  Vercel AI SDK (ai / @ai-sdk/openai / @ai-sdk/google)
@@ -34,7 +41,7 @@ Anthropic Messages API (`/v1/messages`) および OpenAI Responses API (`/v1/res
 上流エンドポイント (Chat Completions / Google Gemini API)
   │  レスポンス変換
   ▼
-クライアントへ返却 (Anthropic 形式 / Responses API 形式 / SSE / WebSocket)
+クライアントへ返却 (Anthropic 形式 / Responses API 形式 / Chat Completions 形式 / SSE / WebSocket)
 ```
 
 ## ファイル構成
@@ -48,17 +55,20 @@ src/
 │   ├── messages.ts              # POST /v1/messages の処理。ストリーム・非ストリーム両対応
 │   ├── responses.ts             # POST /v1/responses の処理 + buildResponsesParams / emitStreamingLoop をエクスポート
 │   ├── responses-ws.ts          # WebSocket /v1/responses の処理。emitStreamingLoop を再利用
+│   ├── chat-completions.ts      # POST /v1/chat/completions の処理。パススルー / Gemini 変換を分岐
 │   └── provider.ts              # getProvider / resolveModel / extractUpstreamError など共通ユーティリティ
 ├── converters/
 │   ├── shared.ts                # toMessages / toToolChoice / filterSystem など共通変換
 │   ├── to-chat-completions.ts   # Anthropic ツール定義 → Chat Completions ToolSet
 │   ├── to-gemini.ts             # Anthropic ツール定義 → Gemini ToolSet
-│   └── from-responses.ts        # Responses API 入力 → CoreMessage / ToolSet / ToolChoice
+│   ├── from-responses.ts        # Responses API 入力 → CoreMessage / ToolSet / ToolChoice
+│   └── from-chat-completions.ts # Chat Completions 入力 → Anthropic メッセージ / Tool / ToolChoice (Gemini 変換用アダプタ)
 ├── tools/
 │   └── google-search.ts         # 組み込み Web 検索ツール
 └── types/
     ├── anthropic.ts             # Anthropic API の型定義 (Request / Response / SSE イベント / Tool)
-    └── openai-responses.ts      # OpenAI Responses API の型定義 (Request / Response / SSE イベント)
+    ├── openai-responses.ts      # OpenAI Responses API の型定義 (Request / Response / SSE イベント)
+    └── openai-chat.ts           # OpenAI Chat Completions API の型定義 (Request / Response / Chunk)
 ```
 
 ## CLI オプション
@@ -115,6 +125,7 @@ pnpm start      # ビルド済みファイルで起動
 | `POST` | `/v1/messages` | Anthropic Messages API 互換エンドポイント |
 | `POST` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (HTTP) |
 | `WS` | `/v1/responses` | OpenAI Responses API 互換エンドポイント (WebSocket) |
+| `POST` | `/v1/chat/completions` | OpenAI Chat Completions API 互換エンドポイント。互換上流へはパススルー、Gemini へは変換 |
 
 ### `/v1/messages` の動作
 
@@ -173,6 +184,33 @@ OpenAI Responses API 互換エンドポイント。クライアントから Resp
 - `{ type: "message", id, role: "assistant", status, content: [{ type: "output_text", text, annotations: [] }] }` — テキスト出力
 - `{ type: "function_call", id, call_id, name, arguments, status }` — ツール呼び出し
 
+### `/v1/chat/completions` の動作
+
+OpenAI Chat Completions API 互換エンドポイント。上流プロバイダーによって動作が 2 通りに分岐する (`handleChatCompletions`)。
+
+**パススルー (ollama / openai / responses / openrouter / azure / custom):**
+- 上流自身が Chat Completions 互換のため、リクエストボディを `${baseURL}/chat/completions` へ `fetch` でそのまま転送し、レスポンス (JSON / SSE) をそのまま返す
+- 変換を挟まないため、SDK 非対応フィールド (`n` / `logprobs` / `frequency_penalty` / `system_fingerprint` など) も透過する
+- `--model` / `CHAT_DEFAULT_MODEL` 指定時は、転送前にボディの `model` フィールドのみ書き換える (それ以外は無加工)
+- 認証ヘッダーは `--auth-type` に従う (`bearer` → `Authorization: Bearer`、`api-key` → `api-key`)。`config.apiKey` が空ならクライアントの `Authorization` / `x-api-key` を引き継ぐ
+- パススルーは生転送のため、組み込み Web 検索などのサーバー側ツールは動作しない
+
+**変換 (google / gemini):**
+- Gemini は Chat Completions 非互換のため、AI SDK (`generateText` / `streamText`) 経由で転送し、出力を Chat Completions 形式へ再構築する
+- リクエスト変換は `from-chat-completions.ts` のアダプタで一度 Anthropic 形式へ写像し、既存の `toMessages` (`flattenToolHistory: true`) / `toGeminiTools` / `toToolChoice` を再利用する
+- 組み込み Web 検索ツールの注入・`maxSteps: 5` のツールループ・サーバー側ツール除外は `/v1/responses` と同等
+- `stream: false` → `{ object: "chat.completion", choices: [...] }` 形式
+- `stream: true` → `chat.completion.chunk` の SSE。順序は OpenAI 仕様に準拠:
+  - テキスト: 先頭 `delta.role: "assistant"` → `delta.content` (×N) → `finish_reason` 付き最終チャンク → usage チャンク → `data: [DONE]`
+  - ツール呼び出し: `delta.tool_calls[].{id,function.name}` (開始) → `delta.tool_calls[].function.arguments` (引数一括) → `finish_reason: "tool_calls"`
+
+#### サポートしているリクエストフィールド
+
+`model` / `messages` / `stream` / `temperature` / `top_p` / `max_tokens` / `max_completion_tokens` / `stop` / `tools` / `tool_choice`
+
+- パススルー時は上記以外の未知フィールドもすべて上流へ透過する
+- 変換 (Gemini) 時、`messages` の `system` / `developer` ロールは system 文字列にまとめ、`tool` ロールは直前の tool_result メッセージへ合流させる。`image_url` は変換できるが、Gemini はツール履歴をテキスト平坦化するため画像は無視される
+
 ### OpenAI Responses API プロバイダー
 
 `--provider responses` 使用時、`getLanguageModel()` が返す OpenAI プロバイダーの `.responses(model)` を使い、上流を Chat Completions ではなく Responses API (`/v1/responses`) に転送する (`isResponsesProvider()` で判定)。ベース URL は `https://api.openai.com/v1`。reasoning モデルの思考出力は `thinking` / `redacted_thinking` ブロックに変換する (下記「変換ルール」参照)。
@@ -220,6 +258,25 @@ OpenAI Responses API 互換エンドポイント。クライアントから Resp
 - reasoning (`--provider responses` などの思考モデル) の出力:
   - 非ストリーミング: `result.reasoningDetails` を `thinking` / `redacted_thinking` ブロックに変換 (`reasoningDetails` が無い場合は `result.reasoning` 文字列を `thinking` ブロックに)
   - ストリーミング: `reasoning` パート → `thinking` ブロック (`thinking_delta`)、`reasoning-signature` → `signature_delta`、`redacted-reasoning` → `redacted_thinking` ブロック
+
+### Chat Completions の変換 (Gemini 変換パスのみ)
+
+パススルー時は無変換。Gemini 変換時のみ以下を適用する (`from-chat-completions.ts`)。
+
+リクエスト (Chat Completions → Anthropic → CoreMessage):
+- `system` / `developer` メッセージ → system 文字列に連結し、非 Claude モデルでは `filterSystemForNonClaudeModel` を適用
+- `user` メッセージ: 文字列はそのまま、配列は `text` / `image_url` パーツを変換 (`data:` URL は base64 ソース、それ以外は URL ソース)
+- `assistant` メッセージ: `content` + `tool_calls[]` を `text` + `tool_use` ブロックへ
+- `tool` メッセージ: `tool_call_id` / `content` を `tool_result` ブロックへ。直前が tool_result のみの user メッセージなら合流
+- `tools` (`{ type: "function", function: {...} }`) → `chatToolsToAnthropic` で Anthropic ツール定義へ写像 → `toGeminiTools`
+- `tool_choice`: `"auto"`/`"none"`/`"required"` → `auto`/`none`/`any`、`{ type: "function", function: { name } }` → `{ type: "tool", name }`
+
+レスポンス (AI SDK → Chat Completions):
+- `finishReason === "length"` → `finish_reason: "length"`
+- ツールコールが存在 または `finishReason === "tool-calls"` → `finish_reason: "tool_calls"`
+- それ以外 → `finish_reason: "stop"`
+- `usage.promptTokens` → `prompt_tokens`、`usage.completionTokens` → `completion_tokens`
+- ツールコールは `choices[].message.tool_calls[]` (`{ id, type: "function", function: { name, arguments } }`)
 
 ## 依存関係
 

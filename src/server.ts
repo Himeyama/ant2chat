@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { handleMessages } from "./handlers/messages.js";
 import { handleResponses } from "./handlers/responses.js";
+import { handleChatCompletions } from "./handlers/chat-completions.js";
 import { usagePage } from "./usage-page.js";
 import { messagesTestPage } from "./messages-test-page.js";
 import { responsesTestPage } from "./responses-test-page.js";
@@ -94,6 +95,10 @@ export function createApp() {
 
   // OpenAI Responses API エンドポイント
   app.post("/v1/responses", handleResponses);
+
+  // OpenAI Chat Completions API エンドポイント
+  // Chat Completions 互換の上流へはパススルー、Gemini へは変換して転送する
+  app.post("/v1/chat/completions", handleChatCompletions);
 
   // 未定義ルート
   app.notFound((c) => c.json({ type: "error", error: { type: "not_found_error", message: "Not found" } }, 404));
