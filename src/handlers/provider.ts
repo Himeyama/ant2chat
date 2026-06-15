@@ -70,3 +70,19 @@ export function extractUpstreamError(err: unknown): { type: string; message: str
 export function makeId(prefix: string): string {
   return `${prefix}${crypto.randomUUID().replace(/-/g, "")}`;
 }
+
+// AI SDK の providerMetadata からキャッシュトークン数を抽出する。
+// OpenAI 系: providerMetadata.openai.cachedPromptTokens (prompt/input_tokens_details.cached_tokens 由来)。
+// 上流がキャッシュ情報を報告しない場合 (Gemini など) は 0。出力キャッシュを報告する上流は現状ないため 0。
+export function extractCacheTokens(providerMetadata: unknown): {
+  inputCacheTokens: number;
+  outputCacheTokens: number;
+} {
+  const meta = providerMetadata as Record<string, Record<string, unknown> | undefined> | undefined;
+  const openai = meta?.openai;
+  const cached = openai?.cachedPromptTokens;
+  return {
+    inputCacheTokens: typeof cached === "number" ? cached : 0,
+    outputCacheTokens: 0,
+  };
+}

@@ -99,8 +99,10 @@ export const logsPage = `<!DOCTYPE html>
     .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 
     /* テーブル */
-    .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .table-wrap { border: 1px solid var(--border); border-radius: var(--radius); overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    /* 横に長いときはテーブルを縮めずスクロールさせる */
+    .table-wrap table { min-width: max-content; }
     thead th {
       font-family: Georgia, 'Times New Roman', 'Noto Sans JP', sans-serif;
       font-size: 0.68rem;
@@ -222,6 +224,70 @@ export const logsPage = `<!DOCTYPE html>
       overflow-y: auto;
     }
 
+    /* 合計 */
+    .totals {
+      margin-top: 0.9rem;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--code-bg);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1.4rem;
+      align-items: baseline;
+    }
+    .totals .totals-title {
+      font-family: Georgia, 'Times New Roman', 'Noto Sans JP', sans-serif;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+    .totals .item { font-size: 0.82rem; }
+    .totals .item .label {
+      font-family: Georgia, 'Noto Sans JP', sans-serif;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-right: 0.35rem;
+    }
+    .totals .item .val { font-family: 'Cascadia Code', 'BIZ UDGothic', monospace; font-weight: 700; }
+    .totals .item .val.cost { color: #3c7a3c; }
+
+    /* 料金表エディタ */
+    .pricing {
+      margin-bottom: 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+    }
+    .pricing[hidden] { display: none; }
+    .pricing p.hint { color: var(--muted); font-size: 0.78rem; margin-bottom: 0.7rem; line-height: 1.6; }
+    .pricing table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .pricing thead th {
+      font-family: Georgia, 'Times New Roman', 'Noto Sans JP', sans-serif;
+      font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--muted); text-align: left; padding: 0.35rem 0.4rem; white-space: nowrap;
+    }
+    .pricing tbody td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--border-light); }
+    .pricing input {
+      font-family: 'Cascadia Code', 'BIZ UDGothic', monospace;
+      font-size: 0.8rem; color: var(--fg); background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 0.25rem 0.4rem; width: 100%;
+    }
+    .pricing input:focus { outline: none; border-color: var(--fg); }
+    .pricing input.num { text-align: right; }
+    .pricing-rate { margin-bottom: 0.8rem; font-size: 0.82rem; }
+    .pricing-rate label { display: inline-flex; align-items: center; gap: 0.4rem; font-family: Georgia, 'Noto Sans JP', sans-serif; color: var(--fg); }
+    .pricing-rate input { width: 7rem; text-align: right; }
+    .pricing .row-del {
+      font-family: Georgia, sans-serif; font-size: 0.95rem; line-height: 1;
+      color: var(--muted); background: none; border: none; padding: 0.2rem 0.4rem; cursor: pointer;
+    }
+    .pricing .row-del:hover { color: #b3472f; background: none; }
+    .pricing .pricing-actions { margin-top: 0.7rem; display: flex; gap: 0.7rem; }
+
     @media (max-width: 880px) {
       .layout { grid-template-columns: 1fr; }
       .detail { position: static; max-height: none; }
@@ -239,9 +305,37 @@ export const logsPage = `<!DOCTYPE html>
     <div class="toolbar">
       <button id="refresh" type="button">更新</button>
       <label><input type="checkbox" id="auto"> 自動更新 (3秒)</label>
+      <button id="pricing-toggle" type="button">料金表</button>
       <button id="clear" type="button">クリア</button>
       <span class="count" id="count"></span>
     </div>
+
+    <section class="pricing" id="pricing" hidden>
+      <p class="hint">
+        モデル名とプロバイダ名が一致 (大文字小文字を問わず) する行の単価でコストを計算します。料金は 100 万トークンあたりの金額 ($ / 1M tokens)。<br>
+        入力トークンにはキャッシュ分が含まれます。コストはキャッシュ分を入力単価から差し引き、入力キャッシュ単価で計算します。設定はこのブラウザに保存されます。
+      </p>
+      <div class="pricing-rate">
+        <label>為替レート: 1 USD = <input type="number" id="usd-jpy" step="any" min="0" placeholder="例: 150"> JPY</label>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Model</th>
+            <th class="num">Input</th>
+            <th class="num">In cache</th>
+            <th class="num">Output</th>
+            <th class="num">Out cache</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="pricing-rows"></tbody>
+      </table>
+      <div class="pricing-actions">
+        <button id="pricing-add" type="button">行を追加</button>
+      </div>
+    </section>
 
     <div class="layout">
       <div>
@@ -253,7 +347,9 @@ export const logsPage = `<!DOCTYPE html>
                 <th>Model</th>
                 <th>Provider</th>
                 <th class="num">Input</th>
+                <th class="num">In cache</th>
                 <th class="num">Output</th>
+                <th class="num">Cost</th>
                 <th class="num">Speed</th>
               </tr>
             </thead>
@@ -261,6 +357,7 @@ export const logsPage = `<!DOCTYPE html>
           </table>
           <div class="empty" id="empty" hidden>ログはまだありません。</div>
         </div>
+        <div class="totals" id="totals" hidden></div>
       </div>
       <div class="detail" id="detail">
         <div class="placeholder">行を選択するとここに詳細が表示されます。</div>
@@ -274,9 +371,77 @@ export const logsPage = `<!DOCTYPE html>
     var detailEl = document.getElementById('detail');
     var countEl  = document.getElementById('count');
     var autoEl   = document.getElementById('auto');
+    var totalsEl = document.getElementById('totals');
+    var pricingEl = document.getElementById('pricing');
+    var pricingRowsEl = document.getElementById('pricing-rows');
     var logs = [];
     var selectedId = null;
     var timer = null;
+
+    // --- 料金表 (localStorage に保存) ---
+    var PRICING_KEY = 'ant2chat_pricing';
+    var USDJPY_KEY = 'ant2chat_usdjpy';
+    var DEFAULT_USDJPY = 160; // 為替レート未設定時のデフォルト (1 USD = 160 円)
+    var pricing = loadPricing();
+    var usdJpy = loadUsdJpy(); // 1 USD = usdJpy 円 (0 = 円換算なし)
+
+    function loadUsdJpy() {
+      try { var v = parseFloat(localStorage.getItem(USDJPY_KEY)); return isFinite(v) && v > 0 ? v : DEFAULT_USDJPY; }
+      catch (e) { return DEFAULT_USDJPY; }
+    }
+    function saveUsdJpy() {
+      try {
+        if (usdJpy > 0) localStorage.setItem(USDJPY_KEY, String(usdJpy));
+        else localStorage.removeItem(USDJPY_KEY);
+      } catch (e) {}
+    }
+
+    function loadPricing() {
+      try {
+        var raw = localStorage.getItem(PRICING_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) { return []; }
+    }
+    function savePricing() {
+      try { localStorage.setItem(PRICING_KEY, JSON.stringify(pricing)); } catch (e) {}
+    }
+    function priceNum(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+    // provider と model が一致 (大文字小文字を問わず) する料金行を探す
+    function findPrice(e) {
+      var prov = (e.provider || '').toLowerCase();
+      var model = (e.model || '').toLowerCase();
+      for (var i = 0; i < pricing.length; i++) {
+        var p = pricing[i];
+        if ((p.provider || '').toLowerCase() === prov && (p.model || '').toLowerCase() === model) return p;
+      }
+      return null;
+    }
+    // コスト (USD)。一致する料金行がなければ null。
+    function costOf(e) {
+      var p = findPrice(e);
+      if (!p) return null;
+      var inCache = e.inputCacheTokens || 0;
+      var outCache = e.outputCacheTokens || 0;
+      var inBase = Math.max(0, (e.inputTokens || 0) - inCache);
+      var outBase = Math.max(0, (e.outputTokens || 0) - outCache);
+      return (
+        inBase * priceNum(p.input) +
+        inCache * priceNum(p.inputCache) +
+        outBase * priceNum(p.output) +
+        outCache * priceNum(p.outputCache)
+      ) / 1e6;
+    }
+    function fmtCost(n) {
+      var s = '$' + n.toFixed(6);
+      if (usdJpy > 0) {
+        // 0.0001 単位で四捨五入して表示
+        var jpy = Math.round(n * usdJpy * 10000) / 10000;
+        s += ' (JPY ' + jpy.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ')';
+      }
+      return s;
+    }
 
     function fmtDate(ts) {
       var d = new Date(ts);
@@ -313,12 +478,44 @@ export const logsPage = `<!DOCTYPE html>
 
         tr.appendChild(el('td', 'mono model-cell', e.model));
         tr.appendChild(el('td', '', e.provider));
-        tr.appendChild(el('td', 'num mono', e.status === 'pending' ? '…' : fmtNum(e.inputTokens)));
-        tr.appendChild(el('td', 'num mono', e.status === 'pending' ? '…' : fmtNum(e.outputTokens)));
+        var pending = e.status === 'pending';
+        tr.appendChild(el('td', 'num mono', pending ? '…' : fmtNum(e.inputTokens)));
+        tr.appendChild(el('td', 'num mono', pending ? '…' : fmtNum(e.inputCacheTokens)));
+        tr.appendChild(el('td', 'num mono', pending ? '…' : fmtNum(e.outputTokens)));
+        var cost = pending ? null : costOf(e);
+        tr.appendChild(el('td', 'num mono', pending ? '…' : (cost == null ? '—' : fmtCost(cost))));
         tr.appendChild(el('td', 'num mono', fmtSpeed(e)));
 
         rowsEl.appendChild(tr);
       });
+      renderTotals();
+    }
+
+    function renderTotals() {
+      totalsEl.textContent = '';
+      totalsEl.hidden = logs.length === 0;
+      if (logs.length === 0) return;
+      var sum = { input: 0, inputCache: 0, output: 0, outputCache: 0, cost: 0 };
+      logs.forEach(function (e) {
+        sum.input += e.inputTokens || 0;
+        sum.inputCache += e.inputCacheTokens || 0;
+        sum.output += e.outputTokens || 0;
+        sum.outputCache += e.outputCacheTokens || 0;
+        var c = costOf(e);
+        if (c != null) sum.cost += c;
+      });
+      totalsEl.appendChild(el('span', 'totals-title', '合計'));
+      var addItem = function (label, value, cls) {
+        var item = el('span', 'item');
+        item.appendChild(el('span', 'label', label));
+        item.appendChild(el('span', 'val' + (cls ? ' ' + cls : ''), value));
+        totalsEl.appendChild(item);
+      };
+      addItem('入力', fmtNum(sum.input));
+      addItem('入力キャッシュ', fmtNum(sum.inputCache));
+      addItem('出力', fmtNum(sum.output));
+      addItem('出力キャッシュ', fmtNum(sum.outputCache));
+      addItem('コスト', fmtCost(sum.cost), 'cost');
     }
 
     // --- プロンプト整形 ---
@@ -397,7 +594,10 @@ export const logsPage = `<!DOCTYPE html>
       add('Provider', e.provider);
       add('Model', e.modelRequested ? (e.modelRequested + ' → ' + e.model) : e.model);
       add('Stream', e.stream ? 'true' : 'false');
-      add('Tokens', 'in ' + fmtNum(e.inputTokens) + ' / out ' + fmtNum(e.outputTokens));
+      add('Input', fmtNum(e.inputTokens) + (e.inputCacheTokens ? ' (cache ' + fmtNum(e.inputCacheTokens) + ')' : ''));
+      add('Output', fmtNum(e.outputTokens) + (e.outputCacheTokens ? ' (cache ' + fmtNum(e.outputCacheTokens) + ')' : ''));
+      var dCost = costOf(e);
+      add('Cost', dCost == null ? '—' : fmtCost(dCost));
       add('Duration', e.durationMs ? (e.durationMs + ' ms') : '—');
       add('Speed', fmtSpeed(e));
       detailEl.appendChild(dl);
@@ -462,6 +662,71 @@ export const logsPage = `<!DOCTYPE html>
         })
         .catch(function () { logs = []; renderRows(); });
     }
+
+    // 料金表エディタ ---
+    function recomputeCosts() {
+      renderRows();
+      if (selectedId) {
+        var sel = logs.filter(function (x) { return x.id === selectedId; })[0];
+        if (sel) renderDetail(sel);
+      }
+    }
+
+    function pricingInput(value, field, idx, isNum) {
+      var inp = el('input', isNum ? 'num' : null);
+      if (isNum) { inp.type = 'number'; inp.step = 'any'; inp.min = '0'; inp.placeholder = '0'; }
+      else { inp.type = 'text'; }
+      inp.value = value == null ? '' : value;
+      inp.addEventListener('input', function () {
+        pricing[idx][field] = inp.value;
+        savePricing();
+        recomputeCosts();
+      });
+      return inp;
+    }
+
+    function renderPricing() {
+      pricingRowsEl.textContent = '';
+      pricing.forEach(function (p, idx) {
+        var tr = el('tr');
+        var addCell = function (node) { var td = el('td'); td.appendChild(node); tr.appendChild(td); };
+        addCell(pricingInput(p.provider, 'provider', idx, false));
+        addCell(pricingInput(p.model, 'model', idx, false));
+        addCell(pricingInput(p.input, 'input', idx, true));
+        addCell(pricingInput(p.inputCache, 'inputCache', idx, true));
+        addCell(pricingInput(p.output, 'output', idx, true));
+        addCell(pricingInput(p.outputCache, 'outputCache', idx, true));
+        var del = el('button', 'row-del', '✕');
+        del.type = 'button';
+        del.title = '削除';
+        del.addEventListener('click', function () {
+          pricing.splice(idx, 1);
+          savePricing();
+          renderPricing();
+          recomputeCosts();
+        });
+        addCell(del);
+        pricingRowsEl.appendChild(tr);
+      });
+    }
+
+    document.getElementById('pricing-toggle').addEventListener('click', function () {
+      pricingEl.hidden = !pricingEl.hidden;
+      if (!pricingEl.hidden) renderPricing();
+    });
+    document.getElementById('pricing-add').addEventListener('click', function () {
+      pricing.push({ provider: '', model: '', input: '', inputCache: '', output: '', outputCache: '' });
+      savePricing();
+      renderPricing();
+    });
+    var usdJpyEl = document.getElementById('usd-jpy');
+    usdJpyEl.value = usdJpy || '';
+    usdJpyEl.addEventListener('input', function () {
+      var v = parseFloat(usdJpyEl.value);
+      usdJpy = isFinite(v) && v > 0 ? v : 0;
+      saveUsdJpy();
+      recomputeCosts();
+    });
 
     document.getElementById('refresh').addEventListener('click', load);
     document.getElementById('clear').addEventListener('click', function () {

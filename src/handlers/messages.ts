@@ -15,6 +15,7 @@ import {
   resolveModel,
   stripEmptyStringValues,
   extractUpstreamError,
+  extractCacheTokens,
 } from "./provider.js";
 import type {
   AnthropicRequest,
@@ -357,12 +358,15 @@ export async function handleMessages(c: Context): Promise<Response> {
           const outputTokens = usage?.completionTokens ?? 0;
           const finishReason = await result.finishReason;
           const stopReason = mapFinishReason(finishReason, sawToolCall);
+          const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(await result.providerMetadata);
 
           enqueue({ type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: outputTokens } });
           enqueue({ type: "message_stop" });
 
           finishLog(logEntry, {
             inputTokens: usage?.promptTokens ?? 0,
+            inputCacheTokens,
+            outputCacheTokens,
             outputTokens,
             response: { text: loggedText || undefined, toolCalls: loggedToolCalls.length > 0 ? loggedToolCalls : undefined, stopReason },
           });
@@ -443,8 +447,11 @@ export async function handleMessages(c: Context): Promise<Response> {
       },
     };
 
+    const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(result.providerMetadata);
     finishLog(logEntry, {
       inputTokens: result.usage.promptTokens,
+      inputCacheTokens,
+      outputCacheTokens,
       outputTokens: result.usage.completionTokens,
       response: {
         text: result.text || undefined,

@@ -12,6 +12,7 @@ import {
   getLanguageModel,
   stripEmptyStringValues,
   extractUpstreamError,
+  extractCacheTokens,
   makeId,
 } from "./provider.js";
 import type {
@@ -252,9 +253,12 @@ export async function emitStreamingLoop(
   const outputTokens = usage?.completionTokens || 0;
 
   if (logEntry) {
+    const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(await result.providerMetadata);
     const toolCalls = sortedTools.map((t) => ({ name: t.name, arguments: t.finalArgs ?? t.argsText }));
     finishLog(logEntry, {
       inputTokens,
+      inputCacheTokens,
+      outputCacheTokens,
       outputTokens,
       response: { text: textAccumulated || undefined, toolCalls: toolCalls.length > 0 ? toolCalls : undefined },
     });
@@ -392,8 +396,11 @@ export async function handleResponses(c: Context): Promise<Response> {
       incomplete_details: finishReason === "length" ? { reason: "max_tokens" } : null,
     };
 
+    const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(result.providerMetadata);
     finishLog(logEntry, {
       inputTokens: result.usage.promptTokens,
+      inputCacheTokens,
+      outputCacheTokens,
       outputTokens: result.usage.completionTokens,
       response: {
         text: result.text || undefined,

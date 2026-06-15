@@ -28,7 +28,11 @@ export interface LogEntry {
   stream: boolean;
   status: "pending" | "ok" | "error";
   inputTokens: number;
+  /** キャッシュ入力トークン数 (input の内、キャッシュから読み出した分。上流が報告した場合のみ) */
+  inputCacheTokens: number;
   outputTokens: number;
+  /** キャッシュ出力トークン数 (上流が報告した場合のみ。現状ほぼ 0) */
+  outputCacheTokens: number;
   /** 所要時間 (ms)。pending 中は 0 */
   durationMs: number;
   /** 元のリクエストボディ (プロンプト情報) */
@@ -62,7 +66,9 @@ export function startLog(init: StartLogInit): LogEntry {
     timestamp: Date.now(),
     status: "pending",
     inputTokens: 0,
+    inputCacheTokens: 0,
     outputTokens: 0,
+    outputCacheTokens: 0,
     durationMs: 0,
     ...init,
   };
@@ -73,7 +79,9 @@ export function startLog(init: StartLogInit): LogEntry {
 
 export interface FinishLogData {
   inputTokens?: number;
+  inputCacheTokens?: number;
   outputTokens?: number;
+  outputCacheTokens?: number;
   response?: LogResponse;
   error?: string;
 }
@@ -82,7 +90,9 @@ export interface FinishLogData {
 export function finishLog(entry: LogEntry, data: FinishLogData): void {
   entry.durationMs = Date.now() - entry.timestamp;
   if (data.inputTokens != null) entry.inputTokens = data.inputTokens;
+  if (data.inputCacheTokens != null) entry.inputCacheTokens = data.inputCacheTokens;
   if (data.outputTokens != null) entry.outputTokens = data.outputTokens;
+  if (data.outputCacheTokens != null) entry.outputCacheTokens = data.outputCacheTokens;
   if (data.response) entry.response = data.response;
   if (data.error != null) {
     entry.error = data.error;

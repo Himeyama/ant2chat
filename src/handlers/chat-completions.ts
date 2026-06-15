@@ -18,6 +18,7 @@ import {
   getLanguageModel,
   stripEmptyStringValues,
   extractUpstreamError,
+  extractCacheTokens,
   makeId,
 } from "./provider.js";
 import type {
@@ -86,6 +87,19 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   return handleViaConversion(c, body, apiKey, model, logEntry);
 }
 
+// OpenAI 互換上流の usage。prompt_tokens_details.cached_tokens がキャッシュ入力分。
+interface PassthroughUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
+// usage からキャッシュ入力トークン数を取り出す。
+function passthroughCacheTokens(usage: PassthroughUsage | undefined): number {
+  const cached = usage?.prompt_tokens_details?.cached_tokens;
+  return typeof cached === "number" ? cached : 0;
+}
+
 // パススルー応答 (SSE) をバックグラウンドで読み取り、トークン数・本文をログへ記録する。
 async function consumePassthroughSSE(stream: ReadableStream<Uint8Array>, logEntry: LogEntry): Promise<void> {
   const reader = stream.getReader();
@@ -93,7 +107,7 @@ async function consumePassthroughSSE(stream: ReadableStream<Uint8Array>, logEntr
   let buf = "";
   let text = "";
   const toolAcc = new Map<number, { name: string; args: string }>();
-  let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined;
+  let usage: PassthroughUsage | undefined;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -108,7 +122,7 @@ async function consumePassthroughSSE(stream: ReadableStream<Uint8Array>, logEntr
         if (payload === "" || payload === "[DONE]") continue;
         let obj: Record<string, unknown>;
         try { obj = JSON.parse(payload); } catch { continue; }
-        const u = obj.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+        const u = obj.usage as PassthroughUsage | undefined;
         if (u) usage = u;
         const choice = (obj.choices as Array<Record<string, unknown>> | undefined)?.[0];
         const delta = choice?.delta as { content?: string; tool_calls?: Array<Record<string, unknown>> } | undefined;
@@ -131,6 +145,7 @@ async function consumePassthroughSSE(stream: ReadableStream<Uint8Array>, logEntr
   const toolCalls: LogToolCall[] = [...toolAcc.values()].filter((t) => t.name).map((t) => ({ name: t.name, arguments: t.args }));
   finishLog(logEntry, {
     inputTokens: usage?.prompt_tokens ?? 0,
+    inputCacheTokens: passthroughCacheTokens(usage),
     outputTokens: usage?.completion_tokens ?? 0,
     response: { text: text || undefined, toolCalls: toolCalls.length > 0 ? toolCalls : undefined },
   });
@@ -149,7 +164,7 @@ function logPassthroughJson(text: string, ok: boolean, logEntry: LogEntry): void
     finishLog(logEntry, {});
     return;
   }
-  const usage = parsed.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+  const usage = parsed.usage as PassthroughUsage | undefined;
   const choice = (parsed.choices as Array<Record<string, unknown>> | undefined)?.[0];
   const msg = choice?.message as { content?: unknown; tool_calls?: Array<Record<string, unknown>> } | undefined;
   const toolCalls: LogToolCall[] = Array.isArray(msg?.tool_calls)
@@ -160,6 +175,7 @@ function logPassthroughJson(text: string, ok: boolean, logEntry: LogEntry): void
     : [];
   finishLog(logEntry, {
     inputTokens: usage?.prompt_tokens ?? 0,
+    inputCacheTokens: passthroughCacheTokens(usage),
     outputTokens: usage?.completion_tokens ?? 0,
     response: {
       text: typeof msg?.content === "string" ? msg.content : undefined,
@@ -383,8 +399,11 @@ async function handleViaConversion(
           }));
           controller.enqueue(enc.encode("data: [DONE]\n\n"));
 
+          const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(await result.providerMetadata);
           finishLog(logEntry, {
             inputTokens: promptTokens,
+            inputCacheTokens,
+            outputCacheTokens,
             outputTokens: completionTokens,
             response: { text: loggedText || undefined, toolCalls: loggedToolCalls.length > 0 ? loggedToolCalls : undefined },
           });
@@ -443,8 +462,11 @@ async function handleViaConversion(
       },
     };
 
+    const { inputCacheTokens, outputCacheTokens } = extractCacheTokens(result.providerMetadata);
     finishLog(logEntry, {
       inputTokens: result.usage.promptTokens,
+      inputCacheTokens,
+      outputCacheTokens,
       outputTokens: result.usage.completionTokens,
       response: {
         text: result.text || undefined,
