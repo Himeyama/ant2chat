@@ -67,6 +67,7 @@ Options:
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
       --no-search         組み込み Web 検索ツールを無効化
       --gemini-relay-url <url>  google/gemini 限定。SDK に URL を組み立てさせず、全 Gemini リクエストをこの URL へそのまま転送する
+      --strip-system-line <text>  受信したシステムプロンプトのうち <text> を含む行を除去する (大文字小文字を区別する部分一致)。カンマ区切りで複数パターン指定可、繰り返し指定も可
   -h, --help              ヘルプを表示
 ```
 
@@ -91,6 +92,7 @@ CLI オプションで上書き可能。
 | `PORT` | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | `1` または `true` で組み込み Web 検索ツールを無効化 |
 | `GEMINI_RELAY_URL` | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
+| `STRIP_SYSTEM_LINE` | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
 ### 設定方法
 
@@ -316,6 +318,27 @@ ant2chat --provider gemini --gemini-relay-url https://example.com/v1/baseurl/end
 - 転送先がモデルを決める前提のため、モデル名は URL パスに乗らない。`-u` / `customBaseURL` は relay 時には使われない
 - 転送先が Google 認証を要求しない場合は API キー未指定でも動作する (内部でプレースホルダを補う)。要求する場合は通常どおり `-k` / `CHAT_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` でキーを渡す
 - `/v1/messages` と `/v1/chat/completions` (Gemini 変換パス) の双方に効く
+
+### システムプロンプトの行除去 (`--strip-system-line`)
+
+クライアントが送ってきたシステムプロンプトから、指定した文字列を含む**行**を上流へ転送する前に丸ごと除去する汎用フィルタ。社内テンプレートの除去・冗長な定型文の削減などのプロンプト整形に使う。
+
+```bash
+# "Internal use only" を含む行を除去
+ant2chat --strip-system-line "Internal use only"
+
+# カンマ区切りで複数パターン (前後の空白はトリムされる)
+ant2chat --strip-system-line "Internal use only, Confidential:"
+
+# 繰り返し指定も可 (カンマ区切りと併用・合算できる)
+ant2chat --strip-system-line "Internal use only" --strip-system-line "Confidential:"
+```
+
+- マッチングは**大文字小文字を区別する部分一致**。指定文字列を含む行だけが削除され、それ以外の行はそのまま残る
+- 1 つの値を**カンマ区切り**にすると複数パターンを指定できる。`--strip-system-line` の繰り返し・環境変数 `STRIP_SYSTEM_LINE` とすべて合算される
+- 全エンドポイント (`/v1/messages`・`/v1/responses`・`/v1/chat/completions`・`/v1beta/models/{model}:…`) のシステムプロンプト / `instructions` / `system`・`developer` メッセージに適用される
+- 除去の結果システムプロンプトが空になった場合は、上流へ system を送らない
+- `/logs` の `request` 表示は**行除去後**(実際に上流へ送った内容)になるため、除去が効いているかをそこで確認できる
 
 ## 開発
 

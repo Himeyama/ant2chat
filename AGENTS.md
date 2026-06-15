@@ -105,6 +105,7 @@ Options:
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
       --no-search         組み込み Web 検索ツールを無効化
       --gemini-relay-url <url>  google/gemini 限定。SDK に URL を組み立てさせず、全 Gemini リクエストをこの URL へそのまま転送する
+      --strip-system-line <text>  受信したシステムプロンプトのうち <text> を含む行を除去する (大文字小文字を区別する部分一致)。カンマ区切りで複数パターン指定可、繰り返し指定も可
   -h, --help              ヘルプを表示
 ```
 
@@ -129,6 +130,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | 任意 | `1` または `true` で組み込み Web 検索ツールを無効化 |
 | `GEMINI_RELAY_URL` | 任意 | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
+| `STRIP_SYSTEM_LINE` | 任意 | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
 ## コマンド
 
@@ -349,6 +351,17 @@ google / gemini プロバイダーの認証ヘッダーは `--auth-type` (環境
 - relay 時は SDK の URL 組み立てを無視するため `-u` / `customBaseURL` は使われない。モデル名も URL パスに乗らない (relay 先がモデルを決める前提)。リクエストボディ・ヘッダー (`--auth-type` で解決した認証ヘッダーなど) はそのまま転送される
 - relay 先が Google 認証を必要としない場合に備え、API キー未指定でも SDK が落ちないようプレースホルダ (`"relay"`) を補う。relay 先が Google 互換認証を要求するなら `-k` / `CHAT_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` で実キーを渡す
 - `/v1/messages` と `/v1/chat/completions` (Gemini 変換パス) の双方に効く (どちらも `getProvider()` 経由)
+
+### システムプロンプトの行除去 (`--strip-system-line`)
+
+クライアントが送ってきたシステムプロンプトから、指定した文字列を含む**行単位**で除去してから上流へ転送する汎用フィルタ。社内テンプレートの除去・冗長な定型文の削減・特定の指示行の差し替え前処理など、中立的なプロンプト整形に使う。
+
+- **指定方法**: CLI `--strip-system-line <text>` または環境変数 `STRIP_SYSTEM_LINE`。各値は**カンマ区切り**で複数パターンを書け (例: `"foo,bar"`)、CLI は**繰り返し指定**もできる。CLI・環境変数・カンマ区切りはすべて合算され、各トークンは前後の空白をトリムして `config.stripSystemLine` (`string[]`) に解決される
+- **マッチング**: 各行に対する**大文字小文字を区別する部分一致** (`line.includes(pattern)`)。いずれかのパターンを含む行は丸ごと削除する。パターン未指定 (空配列) なら何もしない
+- **実装**: `src/converters/shared.ts` の `stripSystemLines(text)` が `\n` 区切りで該当行を除去する。システムプロンプトが文字列化される唯一の合流点である `toMessages()` (Anthropic / Gemini 受信 / Chat Completions 変換パス) と `toMessagesFromResponses()` (Responses API、HTTP / WebSocket) で適用する。Chat Completions パススルーのみ `toMessages` を通らないため、`handlePassthrough` が `body.messages` の `system` / `developer` ロール (文字列・`text` パート両対応) に直接適用する
+- **全行が除去された場合**: system メッセージ自体を出力しない (空の system を上流へ送らない)
+- **適用範囲**: `/v1/messages`・`/v1/responses` (HTTP / WS)・`/v1/chat/completions` (パススルー / Gemini 変換)・`/v1beta/models/{model}:…` の全エンドポイント
+- **ログ表示**: `/logs` に記録される `request.system` / `instructions` は**行除去後** (=実際に上流へ送られた内容) を表示する。各ハンドラーは `finalSystemForLog()` で正規化した値を `startLog()` に渡す。Chat Completions パススルーは `body.messages` の `system` / `developer` を直接書き換えてから記録する。これにより除去が効いているかを `/logs` で確認できる
 
 ## 変換ルール
 

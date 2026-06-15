@@ -2,7 +2,7 @@ import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel } from "../converters/shared.js";
+import { filterSystemForNonClaudeModel, finalSystemForLog } from "../converters/shared.js";
 import { toMessagesFromResponses, toToolsFromResponses, toToolChoiceFromResponses } from "../converters/from-responses.js";
 import { googleSearchTool } from "../tools/google-search.js";
 import { startLog, finishLog, type LogEntry } from "../log-store.js";
@@ -330,7 +330,7 @@ export async function handleResponses(c: Context): Promise<Response> {
     model,
     modelRequested: config.defaultModel && config.defaultModel !== body.model ? body.model : undefined,
     stream: body.stream ?? false,
-    request: { instructions: body.instructions, input: body.input, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
+    request: { instructions: finalSystemForLog(body.instructions), input: body.input, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
   });
 
   // ストリーミング

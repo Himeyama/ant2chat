@@ -7,7 +7,7 @@ import type {
   ResponseTool,
   ResponseToolChoice,
 } from "../types/openai-responses.js";
-import { sanitizeToolName } from "./shared.js";
+import { sanitizeToolName, stripSystemLines } from "./shared.js";
 
 function parseArgs(args: string): unknown {
   try { return JSON.parse(args || "{}"); } catch { return {}; }
@@ -32,7 +32,8 @@ export function toMessagesFromResponses(
   const result: CoreMessage[] = [];
 
   if (instructions) {
-    result.push({ role: "system", content: instructions });
+    const systemContent = stripSystemLines(instructions);
+    if (systemContent) result.push({ role: "system", content: systemContent });
   }
 
   if (typeof input === "string") {

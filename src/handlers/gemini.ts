@@ -3,7 +3,7 @@ import { generateText, streamText, type LanguageModelV1, type ToolSet } from "ai
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, toMessages, toToolChoice } from "../converters/shared.js";
+import { filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import {
@@ -143,7 +143,7 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
     model,
     modelRequested: config.defaultModel && config.defaultModel !== modelFromPath ? modelFromPath : undefined,
     stream: isStream,
-    request: { system, messages: anthropicMessages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: anthropicChoice },
+    request: { system: finalSystemForLog(system), messages: anthropicMessages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: anthropicChoice },
   });
 
   const languageModel = (

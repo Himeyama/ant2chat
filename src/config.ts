@@ -20,6 +20,7 @@ const { values } = parseArgs({
     global:      { type: "boolean", short: "g" },
     "no-search": { type: "boolean" },
     "gemini-relay-url": { type: "string" },
+    "strip-system-line": { type: "string", multiple: true },
     help:        { type: "boolean", short: "h" },
   },
   strict: false,
@@ -45,6 +46,9 @@ Options:
       --gemini-relay-url <url>  For --provider google/gemini: POST every Gemini request verbatim to this exact URL
                                 instead of letting the SDK build {baseURL}/models/{model}:generateContent
                                 (the ?alt=sse query is preserved for streaming)
+      --strip-system-line <text>  Remove any line of the incoming system prompt that contains <text>
+                                  (case-sensitive substring match). Comma-separated for multiple patterns;
+                                  also repeatable
   -h, --help              Show this help
 
 Environment variables (overridden by CLI options):
@@ -59,6 +63,7 @@ Environment variables (overridden by CLI options):
   CHAT_DEFAULT_MODEL             Default model name
   NO_SEARCH                      Disable built-in web search tool (set to "1" or "true")
   GEMINI_RELAY_URL               For --provider google/gemini: POST every Gemini request verbatim to this exact URL
+  STRIP_SYSTEM_LINE              Remove any system-prompt line containing this text (comma-separated for multiple patterns)
 `);
   process.exit(0);
 }
@@ -159,6 +164,23 @@ const geminiRelayURL =
     ? String(values["gemini-relay-url"])
     : (process.env.GEMINI_RELAY_URL || undefined);
 
+// system プロンプトから「この文字列を含む行」を除去するパターン群を解決する。
+// --strip-system-line は繰り返し指定可能 (multiple)。各値・環境変数 STRIP_SYSTEM_LINE は
+// カンマ区切りで複数パターンを指定できる (各トークンは前後の空白をトリム)。
+function resolveStripSystemLine(): string[] {
+  const cli = values["strip-system-line"];
+  const raw: string[] = Array.isArray(cli)
+    ? cli.map(String)
+    : cli != null
+      ? [String(cli)]
+      : [];
+  if (process.env.STRIP_SYSTEM_LINE) raw.push(process.env.STRIP_SYSTEM_LINE);
+  return raw
+    .flatMap((entry) => entry.split(","))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export const config = {
   providerName,
   baseURL:       resolvedBaseURL,
@@ -170,4 +192,5 @@ export const config = {
   defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? geminiParsed?.model ?? ""),
   noSearch:      Boolean(values["no-search"]) || noSearchEnv,
   geminiRelayURL,
+  stripSystemLine: resolveStripSystemLine(),
 };

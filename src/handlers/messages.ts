@@ -3,7 +3,7 @@ import { generateText, streamText, type JSONValue, type LanguageModelV1, type To
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, toMessages, toToolChoice } from "../converters/shared.js";
+import { filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
@@ -128,18 +128,20 @@ export async function handleMessages(c: Context): Promise<Response> {
   }
   console.log(highlightJson(JSON.stringify(summary, null, 2)));
 
+  const system = body.system != null && !model.toLowerCase().includes("claude")
+    ? filterSystemForNonClaudeModel(body.system, model)
+    : body.system;
+
   const logEntry = startLog({
     endpoint: "/v1/messages",
     provider: config.providerName,
     model,
     modelRequested: config.defaultModel && config.defaultModel !== body.model ? body.model : undefined,
     stream: body.stream ?? false,
-    request: { system: body.system, messages: body.messages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
+    // ログには行除去後 (実際に上流へ送る) の system を記録する
+    request: { system: finalSystemForLog(system), messages: body.messages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
   });
 
-  const system = body.system != null && !model.toLowerCase().includes("claude")
-    ? filterSystemForNonClaudeModel(body.system, model)
-    : body.system;
   const messages = toMessages(body.messages, system, {
     flattenToolHistory: isGoogleProvider(config.providerName),
   });

@@ -2,7 +2,7 @@ import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, toMessages, toToolChoice } from "../converters/shared.js";
+import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines } from "../converters/shared.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import {
   chatMessagesToAnthropic,
@@ -22,6 +22,7 @@ import {
   makeId,
 } from "./provider.js";
 import type {
+  ChatMessage,
   ChatCompletionsRequest,
   ChatCompletionChunk,
   ChatCompletionChunkChoice,
@@ -66,6 +67,10 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   }
   // --model / CHAT_DEFAULT_MODEL の強制指定。パススルー時もボディの model を書き換える
   body.model = model;
+
+  // system / developer メッセージから指定行を除去する。パススルー・変換・ログのすべてに反映させるため、
+  // 分岐より前に body.messages へ適用する (startLog も除去後を記録する)
+  stripSystemFromMessages(body.messages);
 
   const passthrough = !isGoogleProvider(config.providerName);
   const toolNames = (body.tools ?? []).map((t) => t?.function?.name).filter(Boolean);
@@ -205,6 +210,22 @@ function normalizeMaxTokensForOpenAI(body: ChatCompletionsRequest): void {
   if (body.max_tokens != null && body.max_completion_tokens == null) {
     body.max_completion_tokens = body.max_tokens;
     delete body.max_tokens;
+  }
+}
+
+// system / developer ロールのメッセージから指定パターンを含む行を除去する (body.messages を直接書き換える)。
+// handleChatCompletions の冒頭で 1 度だけ呼び、パススルー・変換・ログのすべてに反映させる。
+function stripSystemFromMessages(messages: ChatMessage[] | undefined): void {
+  if (config.stripSystemLine.length === 0 || !messages) return;
+  for (const msg of messages) {
+    if (msg.role !== "system" && msg.role !== "developer") continue;
+    if (typeof msg.content === "string") {
+      msg.content = stripSystemLines(msg.content);
+    } else if (Array.isArray(msg.content)) {
+      for (const part of msg.content) {
+        if (part.type === "text") part.text = stripSystemLines(part.text);
+      }
+    }
   }
 }
 

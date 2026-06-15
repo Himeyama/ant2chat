@@ -1,4 +1,5 @@
 import { type CoreMessage, type ImagePart, type TextPart } from "ai";
+import { config } from "../config.js";
 import type {
   AnthropicMessage,
   AnthropicToolChoice,
@@ -48,6 +49,27 @@ function toolResultContentToString(content: string | ContentBlockText[]): string
 // ツール名に使えない文字を _ に置換する
 export function sanitizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+// config.stripSystemLine に指定された文字列のいずれかを含む行を system プロンプトから除去する。
+// 大文字小文字を区別する部分一致。パターン未指定なら元の文字列をそのまま返す。
+export function stripSystemLines(text: string): string {
+  const patterns = config.stripSystemLine;
+  if (!patterns || patterns.length === 0) return text;
+  return text
+    .split("\n")
+    .filter((line) => !patterns.some((p) => line.includes(p)))
+    .join("\n");
+}
+
+// 通信ログ用: system プロンプトを「実際に上流へ送られる文字列」(行除去適用後) へ正規化する。
+// 全行が除去されて空になった場合は undefined を返す (上流へ system を送らないのと一致)。
+export function finalSystemForLog(
+  system: string | SystemBlock[] | undefined
+): string | undefined {
+  if (system == null) return undefined;
+  const stripped = stripSystemLines(systemToString(system));
+  return stripped.length > 0 ? stripped : undefined;
 }
 
 export function filterSystemForNonClaudeModel(
@@ -151,7 +173,8 @@ export function toMessages(
   const result: CoreMessage[] = [];
 
   if (system) {
-    result.push({ role: "system", content: systemToString(system) });
+    const systemContent = stripSystemLines(systemToString(system));
+    if (systemContent) result.push({ role: "system", content: systemContent });
   }
 
   const effectiveMessages = options?.flattenToolHistory

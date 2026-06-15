@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
 import { extractUpstreamError } from "./provider.js";
+import { finalSystemForLog } from "../converters/shared.js";
 import { startLog, finishLog } from "../log-store.js";
 import { buildResponsesParams, emitStreamingLoop } from "./responses.js";
 import type { ResponsesRequest, ResponsesStreamEvent } from "../types/openai-responses.js";
@@ -51,7 +52,7 @@ export async function handleResponsesWs(ws: WebSocket, rawApiKey: string): Promi
         model,
         modelRequested: config.defaultModel && config.defaultModel !== body.model ? body.model : undefined,
         stream: true,
-        request: { instructions: body.instructions, input: body.input, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
+        request: { instructions: finalSystemForLog(body.instructions), input: body.input, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
       });
 
       const emit = (event: ResponsesStreamEvent) => ws.send(JSON.stringify(event));
