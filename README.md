@@ -302,21 +302,41 @@ pnpm start    # ビルド済みで起動
 ```
 クライアント
   │  POST /v1/messages          (Anthropic 形式)
-  │  POST /v1/responses         (OpenAI Responses API 形式)
+  │  POST /v1/responses         (HTTP)
+  │  WS   /v1/responses         (WebSocket)
   │  POST /v1/chat/completions  (OpenAI Chat Completions 形式)
   ▼
-[Hono サーバー]
-  │  リクエスト変換 → CoreMessage
-  │  (/v1/chat/completions かつ互換上流の場合はパススルー)
-  │  通信ログを log-store に記録 (GET /logs で閲覧)
-  ▼
-[Vercel AI SDK]  generateText / streamText
+[Hono サーバー]  src/server.ts
+  │  各ハンドラーが startLog / finishLog で通信ログを記録 (src/log-store.ts)
+  │  → GET /logs (src/logs-page.ts) で閲覧
   │
+  ├─ handleMessages  src/handlers/messages.ts
+  │    │  リクエスト変換 (Anthropic → CoreMessage)
+  │    ▼
+  │  [toMessages / toChatCompletionsTools / toGeminiTools]  src/converters/
+  │
+  ├─ handleResponses  src/handlers/responses.ts  (HTTP POST)
+  │    │
+  ├─ handleResponsesWs  src/handlers/responses-ws.ts  (WebSocket upgrade)
+  │    │  リクエスト変換 (Responses API → CoreMessage)  ← emitStreamingLoop を共有
+  │    ▼
+  │  [toMessagesFromResponses / toToolsFromResponses]  src/converters/from-responses.ts
+  │
+  └─ handleChatCompletions  src/handlers/chat-completions.ts
+       │  ・Chat Completions 互換の上流 → そのままパススルー (fetch で生転送)
+       │  ・Gemini → 変換 (CC → Anthropic → CoreMessage、出力を CC 形式に再構築)
+       ▼
+     [chatMessagesToAnthropic / chatToolsToAnthropic]  src/converters/from-chat-completions.ts
+  │
+  │  共通プロバイダー  src/handlers/provider.ts
+  │  Vercel AI SDK (ai / @ai-sdk/openai / @ai-sdk/google)
   ▼
-上流 OpenAI 互換エンドポイント / Google Gemini API (CHAT_BASE_URL)
+上流エンドポイント
+  ├─ Chat Completions 互換: ollama / openai / responses / openrouter / azure (パススルー)
+  └─ Google Gemini API (変換)
   │  レスポンス変換
   ▼
-クライアントへ返却 (Anthropic 形式 / Responses API 形式 / Chat Completions 形式 / SSE)
+クライアントへ返却 (Anthropic 形式 / Responses API 形式 / Chat Completions 形式 / SSE / WebSocket)
 ```
 
 ## エージェントコーディングツールでの使用例
