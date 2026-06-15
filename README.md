@@ -163,6 +163,15 @@ ANTHROPIC_BASE_URL=http://localhost:3000 claude
 | `GET` | `/logs/data` | 通信ログを JSON 配列で返す (閲覧ページが取得) |
 | `DELETE` | `/logs/data` | 通信ログをクリアする |
 
+### クライアント認証
+
+ant2chat 自身は受信リクエストを認証しない。上流へ渡す API キーは、サーバー側キー（`-k` / `CHAT_API_KEY` 等）があればそれを使い、無ければクライアントのヘッダーから取り出す。読み取り順は各エンドポイントの正規方式に合わせている。
+
+- `/v1/messages`（Anthropic）: `x-api-key` を優先し、`Authorization: Bearer`（`ANTHROPIC_AUTH_TOKEN` 方式）にもフォールバック
+- `/v1/responses` / `/v1/chat/completions`（OpenAI）: `Authorization: Bearer` を優先し、`x-api-key` にもフォールバック
+
+取り出したキーは上流の認証ヘッダー（OpenAI 系は `--auth-type`、Gemini は「Gemini: 認証ヘッダー」参照）に載る。
+
 ### `/logs` について
 
 プロキシを通過したリクエストを記録し、ブラウザで `/logs` を開くと一覧で確認できる。

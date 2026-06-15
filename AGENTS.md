@@ -145,6 +145,22 @@ pnpm start      # ビルド済みファイルで起動
 | `GET` | `/logs/data` | 通信ログを JSON 配列で返す (閲覧ページが取得) |
 | `DELETE` | `/logs/data` | 通信ログをクリアする |
 
+### クライアント認証 (上流へのキー中継)
+
+ant2chat 自身は受信リクエストを認証しない (将来の `--proxy-key` 拡張ポイント参照)。各 POST ハンドラーは上流へ渡す API キーを次の優先順位で決める。
+
+1. サーバー側キー (`-k` / `CHAT_API_KEY` / 各プロバイダー fallback) が設定済みなら、それを使い**クライアントのヘッダーは無視する**
+2. 未設定 (パススルー) ならクライアントのヘッダーから取り出す
+
+クライアントヘッダーの読み取り順はエンドポイントの正規方式に合わせている。
+
+| エンドポイント | 読み取り順 |
+|---|---|
+| `/v1/messages` (Anthropic) | `x-api-key` → `Authorization: Bearer` |
+| `/v1/responses` / `/v1/chat/completions` (OpenAI) | `Authorization: Bearer` → `x-api-key` |
+
+`/v1/messages` は Anthropic Messages API の正規方式である `x-api-key` を優先し、Bearer トークン方式 (`ANTHROPIC_AUTH_TOKEN` など) にもフォールバック対応する。取り出したキーは `getProvider()` 経由で上流の認証ヘッダー (OpenAI 系は `--auth-type`、Gemini は「Gemini: 認証ヘッダー」参照) に載る。
+
 ### `/v1/messages` の動作
 
 - `stream: false` (省略時) → `generateText` で同期レスポンスを返す
