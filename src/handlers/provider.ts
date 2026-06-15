@@ -70,7 +70,9 @@ export function getProvider(apiKey: string) {
 }
 
 export function resolveModel(requestedModel: string): string {
-  return config.defaultModel || requestedModel;
+  // CLI / 環境変数の強制指定 → クライアント指定。どちらも無ければ空文字
+  // (undefined を返すと下流 SDK が modelId.includes などで落ちるため必ず string にする)
+  return config.defaultModel || requestedModel || "";
 }
 
 export function getLanguageModel(provider: ReturnType<typeof getProvider>, model: string): LanguageModelV1 {

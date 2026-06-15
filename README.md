@@ -72,6 +72,8 @@ Options:
 
 優先順位: CLI オプション → 環境変数 → クライアント指定
 
+モデル名はこのいずれかで必ず指定する必要がある。`--model` / `CHAT_DEFAULT_MODEL` を設定しておらず、クライアントの `model` フィールドも空欄/未指定の場合は、リクエストを上流へ送る前に HTTP 400 (`No model specified. ...`) を返す。
+
 ## 環境変数
 
 CLI オプションで上書き可能。
@@ -123,6 +125,7 @@ ant2chat -u http://localhost:11434/v1 -m llama3.2
 ant2chat -u https://<resource>.openai.azure.com/openai/deployments/<deployment> -k <key> -m gpt-4o
 # Gemini は models/{model}:generateContent 形式の URL を直接指定可能 (ベース URL とモデル名を自動分解)
 ant2chat -u https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent -k AIzaSy-xxx
+ant2chat --provider gemini --gemini-relay-url https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent --model gemini-3.1-flash-lite-preview
 ```
 
 ## 使い方

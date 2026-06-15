@@ -102,6 +102,18 @@ export async function handleMessages(c: Context): Promise<Response> {
     : (c.req.header("x-api-key") ?? c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
   const provider = getProvider(apiKey);
   const model = resolveModel(body.model);
+  if (!model) {
+    return c.json(
+      {
+        type: "error",
+        error: {
+          type: "invalid_request_error",
+          message: 'No model specified. Provide a "model" field in the request, or start ant2chat with --model / CHAT_DEFAULT_MODEL.',
+        },
+      },
+      400
+    );
+  }
 
   const toolNames = body.tools?.map((t) => t.name) ?? [];
   const summary: Record<string, unknown> = {

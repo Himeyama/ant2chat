@@ -99,6 +99,8 @@ Options:
 
 優先順位: **CLI オプション → 環境変数 → クライアント指定**
 
+モデル名はこの優先順位のいずれかで必ず解決される必要がある。`--model` / `CHAT_DEFAULT_MODEL` が未設定で、かつクライアントが `model` フィールドを空欄/未指定で送った場合、各 POST ハンドラーは上流へ送る前に **HTTP 400 (`invalid_request_error` / `invalid_request`)** を返す (`No model specified. ...`)。これにより、モデル未解決時に下流 SDK が `modelId.includes` などで不明瞭なクラッシュを起こすのを防ぐ。
+
 ## 環境変数
 
 CLI オプションで上書き可能。`.env.example` をコピーして `.env` を作成すること。

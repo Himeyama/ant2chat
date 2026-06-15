@@ -53,6 +53,17 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
 
   const requestedModel = body.model;
   const model = resolveModel(body.model);
+  if (!model) {
+    return c.json(
+      {
+        error: {
+          message: 'No model specified. Provide a "model" field in the request, or start ant2chat with --model / CHAT_DEFAULT_MODEL.',
+          type: "invalid_request_error",
+        },
+      },
+      400
+    );
+  }
   // --model / CHAT_DEFAULT_MODEL の強制指定。パススルー時もボディの model を書き換える
   body.model = model;
 

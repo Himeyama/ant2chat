@@ -298,6 +298,17 @@ export async function handleResponses(c: Context): Promise<Response> {
 
   const params = buildResponsesParams(body, apiKey);
   const { model, commonParams, serverToolNames } = params;
+  if (!model) {
+    return c.json(
+      {
+        error: {
+          code: "invalid_request",
+          message: 'No model specified. Provide a "model" field in the request, or start ant2chat with --model / CHAT_DEFAULT_MODEL.',
+        },
+      },
+      400
+    );
+  }
 
   const toolNames = body.tools?.map(t => t.name) ?? [];
   const summary: Record<string, unknown> = {

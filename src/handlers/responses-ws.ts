@@ -21,6 +21,16 @@ export async function handleResponsesWs(ws: WebSocket, rawApiKey: string): Promi
       const apiKey = config.apiKey !== "" ? config.apiKey : rawApiKey;
       const params = buildResponsesParams(body, apiKey);
       const { model } = params;
+      if (!model) {
+        ws.send(JSON.stringify({
+          type: "error",
+          code: "invalid_request",
+          message: 'No model specified. Provide a "model" field in the request, or start ant2chat with --model / CHAT_DEFAULT_MODEL.',
+        }));
+        ws.close();
+        resolve();
+        return;
+      }
 
       const toolNames = body.tools?.map(t => t.name) ?? [];
       const summary: Record<string, unknown> = {
