@@ -1,6 +1,6 @@
 # ant2chat
 
-![](docs/system.drawio.png)
+![](docs/system.png)
 
 Anthropic Messages API (`/v1/messages`)、OpenAI Responses API (`/v1/responses`)、OpenAI Chat Completions API (`/v1/chat/completions`) を受け取り、上流の Chat Completions API / Google Gemini API へ変換して転送するプロキシサーバー。
 
