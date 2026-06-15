@@ -2,7 +2,7 @@ import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, finalSystemForLog } from "../converters/shared.js";
+import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog } from "../converters/shared.js";
 import { toMessagesFromResponses, toToolsFromResponses, toToolChoiceFromResponses } from "../converters/from-responses.js";
 import { googleSearchTool } from "../tools/google-search.js";
 import { startLog, finishLog, redactHeaders, type LogEntry } from "../log-store.js";
@@ -295,6 +295,9 @@ export async function handleResponses(c: Context): Promise<Response> {
   const apiKey = config.apiKey !== ""
     ? config.apiKey
     : (c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ?? c.req.header("x-api-key") ?? "");
+
+  // --min 指定時は最小構成のツールのみ転送する (送信前にクライアントツールを除外)
+  body.tools = filterMinTools(body.tools);
 
   const params = buildResponsesParams(body, apiKey);
   const { model, commonParams, serverToolNames } = params;

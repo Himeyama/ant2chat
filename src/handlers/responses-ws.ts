@@ -3,7 +3,7 @@ import type { WebSocket } from "ws";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
 import { extractUpstreamError } from "./provider.js";
-import { finalSystemForLog } from "../converters/shared.js";
+import { filterMinTools, finalSystemForLog } from "../converters/shared.js";
 import { startLog, finishLog, redactHeaders } from "../log-store.js";
 import { buildResponsesParams, emitStreamingLoop } from "./responses.js";
 import type { ResponsesRequest, ResponsesStreamEvent } from "../types/openai-responses.js";
@@ -25,6 +25,10 @@ export async function handleResponsesWs(
       }
 
       const apiKey = config.apiKey !== "" ? config.apiKey : rawApiKey;
+
+      // --min 指定時は最小構成のツールのみ転送する (送信前にクライアントツールを除外)
+      body.tools = filterMinTools(body.tools);
+
       const params = buildResponsesParams(body, apiKey);
       const { model } = params;
       if (!model) {

@@ -19,6 +19,7 @@ const { values } = parseArgs({
     model:       { type: "string",  short: "m" },
     global:      { type: "boolean", short: "g" },
     "no-search": { type: "boolean" },
+    min:         { type: "boolean" },
     "gemini-relay-url": { type: "string" },
     "strip-system-line": { type: "string", multiple: true },
     help:        { type: "boolean", short: "h" },
@@ -43,6 +44,9 @@ Options:
   -m, --model <model>     Force model name (overrides client's model field)
   -g, --global            Listen on 0.0.0.0 (expose to network)
       --no-search         Disable built-in web search tool
+      --min               Forward a minimal tool set: strip agent / task / scheduling
+                          client tools (Agent, Task*, Cron*, ScheduleWakeup, Monitor, etc.)
+                          before sending the request upstream
       --gemini-relay-url <url>  For --provider google/gemini: POST every Gemini request verbatim to this exact URL
                                 instead of letting the SDK build {baseURL}/models/{model}:generateContent
                                 (the ?alt=sse query is preserved for streaming)
@@ -62,6 +66,7 @@ Environment variables (overridden by CLI options):
   CHAT_AUTH_TYPE                 Auth header type
   CHAT_DEFAULT_MODEL             Default model name
   NO_SEARCH                      Disable built-in web search tool (set to "1" or "true")
+  MIN_TOOLS                      Forward a minimal tool set (set to "1" or "true")
   GEMINI_RELAY_URL               For --provider google/gemini: POST every Gemini request verbatim to this exact URL
   STRIP_SYSTEM_LINE              Remove any system-prompt line containing this text (comma-separated for multiple patterns)
 `);
@@ -157,6 +162,7 @@ try {
 }
 
 const noSearchEnv = process.env.NO_SEARCH === "1" || process.env.NO_SEARCH === "true";
+const minToolsEnv = process.env.MIN_TOOLS === "1" || process.env.MIN_TOOLS === "true";
 
 // Gemini 専用: 設定された場合、SDK が組み立てる URL を無視してこの URL へ verbatim 転送する
 const geminiRelayURL =
@@ -191,6 +197,7 @@ export const config = {
   authType:      (values["auth-type"] != null ? String(values["auth-type"]) : (process.env.CHAT_AUTH_TYPE ?? defaultAuthType(providerName))) as AuthType,
   defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? geminiParsed?.model ?? ""),
   noSearch:      Boolean(values["no-search"]) || noSearchEnv,
+  minTools:      Boolean(values.min) || minToolsEnv,
   geminiRelayURL,
   stripSystemLine: resolveStripSystemLine(),
 };

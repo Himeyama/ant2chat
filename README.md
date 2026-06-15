@@ -66,6 +66,7 @@ Options:
   -m, --model <model>     モデル名を強制指定 (クライアントの model フィールドを上書き)
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
       --no-search         組み込み Web 検索ツールを無効化
+      --min               最小構成のツールのみ転送する。エージェント実行・タスク管理・スケジューリング系のクライアントツール (Agent / Task* / Cron* / ScheduleWakeup / Monitor など) を上流へ送る前に除外する
       --gemini-relay-url <url>  google/gemini 限定。SDK に URL を組み立てさせず、全 Gemini リクエストをこの URL へそのまま転送する
       --strip-system-line <text>  受信したシステムプロンプトのうち <text> を含む行を除去する (大文字小文字を区別する部分一致)。カンマ区切りで複数パターン指定可、繰り返し指定も可
   -h, --help              ヘルプを表示
@@ -91,6 +92,7 @@ CLI オプションで上書き可能。
 | `CHAT_AUTH_TYPE` | 認証ヘッダー形式: bearer \| api-key \| x-goog-api-key |
 | `PORT` | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | `1` または `true` で組み込み Web 検索ツールを無効化 |
+| `MIN_TOOLS` | `--min` のフォールバック。`1` または `true` で最小構成のツールのみ転送 |
 | `GEMINI_RELAY_URL` | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
 | `STRIP_SYSTEM_LINE` | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
@@ -340,6 +342,23 @@ ant2chat --strip-system-line "Internal use only" --strip-system-line "Confidenti
 - 全エンドポイント (`/v1/messages`・`/v1/responses`・`/v1/chat/completions`・`/v1beta/models/{model}:…`) のシステムプロンプト / `instructions` / `system`・`developer` メッセージに適用される
 - 除去の結果システムプロンプトが空になった場合は、上流へ system を送らない
 - `/logs` の `request` 表示は**行除去後**(実際に上流へ送った内容)になるため、除去が効いているかをそこで確認できる
+
+### 最小ツール構成 (`--min`)
+
+クライアント (例: Claude Code) が送ってくるツール定義のうち、エージェント実行・タスク管理・スケジューリングなど最小構成では不要なツールを、上流へ転送する前に名前で除外する。軽量なモデル・上流へ余計なツールを送りたくない場合に使う。
+
+```bash
+# --min を付けるだけ
+ant2chat --min
+
+# 環境変数でも指定可
+MIN_TOOLS=1 ant2chat
+```
+
+- 除外対象 (ツール名と完全一致): `DesignSync` / `NotebookEdit` / `WaitForMcpServers` / `Monitor` / `PushNotification` / `ScheduleWakeup` / `TaskCreate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` / `TaskUpdate` / `Agent` / `CronCreate` / `CronDelete` / `CronList` / `EnterWorktree` / `ExitWorktree` / `EnterPlanMode` / `ExitPlanMode` / `Skill` / `Workflow` / `mcp__ide__executeCode` / `mcp__ide__getDiagnostics`
+- 組み込み Web 検索 (`google_search` / `WebSearch`) はサーバー側で注入されるツールのため `--min` の影響を受けない (無効化は `--no-search`)
+- 全エンドポイント (`/v1/messages`・`/v1/responses`・`/v1/chat/completions`・`/v1beta/models/{model}:…`) に適用される
+- `/logs` の `request.tools` は**除外後**(実際に上流へ送ったツール)を表示する
 
 ## 開発
 

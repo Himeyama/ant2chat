@@ -51,6 +51,45 @@ export function sanitizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
+// --min 指定時に上流へ送らない (除外する) クライアントツール名の集合。
+// エージェント実行・タスク管理・スケジューリングなど、最小構成では不要なツールを送信前に取り除く。
+export const MIN_EXCLUDED_TOOLS = new Set<string>([
+  "DesignSync",
+  "NotebookEdit",
+  "WaitForMcpServers",
+  "Monitor",
+  "PushNotification",
+  "ScheduleWakeup",
+  "TaskCreate",
+  "TaskGet",
+  "TaskList",
+  "TaskOutput",
+  "TaskStop",
+  "TaskUpdate",
+  "Agent",
+  "CronCreate",
+  "CronDelete",
+  "CronList",
+  "EnterWorktree",
+  "ExitWorktree",
+  "EnterPlanMode",
+  "ExitPlanMode",
+  "Skill",
+  "Workflow",
+  "mcp__ide__executeCode",
+  "mcp__ide__getDiagnostics",
+]);
+
+// config.minTools が有効なとき、MIN_EXCLUDED_TOOLS に含まれるツールを除外する。
+// name フィールドを持つツール定義配列 (Anthropic / Responses 形式) に使える。
+// config.minTools が無効なら配列はそのまま返す。
+export function filterMinTools<T extends { name: string }>(
+  tools: T[] | undefined
+): T[] | undefined {
+  if (!config.minTools || !tools) return tools;
+  return tools.filter((t) => !MIN_EXCLUDED_TOOLS.has(t.name));
+}
+
 // config.stripSystemLine に指定された文字列のいずれかを含む行を system プロンプトから除去する。
 // 大文字小文字を区別する部分一致。パターン未指定なら元の文字列をそのまま返す。
 export function stripSystemLines(text: string): string {

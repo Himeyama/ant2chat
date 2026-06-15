@@ -3,7 +3,7 @@ import { generateText, streamText, type JSONValue, type LanguageModelV1, type To
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
+import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
@@ -115,6 +115,8 @@ export async function handleMessages(c: Context): Promise<Response> {
     );
   }
 
+  // --min 指定時は最小構成のツールのみ転送する (送信前にクライアントツールを除外)
+  body.tools = filterMinTools(body.tools);
   const toolNames = body.tools?.map((t) => t.name) ?? [];
   const summary: Record<string, unknown> = {
     model,

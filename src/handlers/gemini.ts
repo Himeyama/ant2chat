@@ -3,7 +3,7 @@ import { generateText, streamText, type LanguageModelV1, type ToolSet } from "ai
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
+import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import {
@@ -95,7 +95,8 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
   const generationConfig = body.generationConfig ?? body.generation_config;
   const toolConfig = body.toolConfig ?? body.tool_config;
   const { system: rawSystem, messages: anthropicMessages } = geminiContentsToAnthropic(body.contents, systemInstruction);
-  const anthropicTools = geminiToolsToAnthropic(body.tools);
+  // --min 指定時は最小構成のツールのみ転送する (送信前にクライアントツールを除外)
+  const anthropicTools = filterMinTools(geminiToolsToAnthropic(body.tools));
   const anthropicChoice = geminiToolConfigToToolChoice(toolConfig);
   const thinking = geminiThinkingToAnthropic(generationConfig);
   const includeThoughts = generationConfig?.thinkingConfig?.includeThoughts === true;

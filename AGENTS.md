@@ -104,6 +104,7 @@ Options:
   -m, --model <model>     モデル名を強制指定 (クライアントの model フィールドを上書き)
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
       --no-search         組み込み Web 検索ツールを無効化
+      --min               最小構成のツールのみ転送する。エージェント実行・タスク管理・スケジューリング系のクライアントツール (Agent / Task* / Cron* / ScheduleWakeup / Monitor など) を上流へ送る前に除外する
       --gemini-relay-url <url>  google/gemini 限定。SDK に URL を組み立てさせず、全 Gemini リクエストをこの URL へそのまま転送する
       --strip-system-line <text>  受信したシステムプロンプトのうち <text> を含む行を除去する (大文字小文字を区別する部分一致)。カンマ区切りで複数パターン指定可、繰り返し指定も可
   -h, --help              ヘルプを表示
@@ -129,6 +130,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `CHAT_AUTH_TYPE` | 任意 | 認証ヘッダー形式: bearer \| api-key \| x-goog-api-key |
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | 任意 | `1` または `true` で組み込み Web 検索ツールを無効化 |
+| `MIN_TOOLS` | 任意 | `--min` のフォールバック。`1` または `true` で最小構成のツールのみ転送 |
 | `GEMINI_RELAY_URL` | 任意 | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
 | `STRIP_SYSTEM_LINE` | 任意 | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
@@ -363,6 +365,17 @@ google / gemini プロバイダーの認証ヘッダーは `--auth-type` (環境
 - **全行が除去された場合**: system メッセージ自体を出力しない (空の system を上流へ送らない)
 - **適用範囲**: `/v1/messages`・`/v1/responses` (HTTP / WS)・`/v1/chat/completions` (パススルー / Gemini 変換)・`/v1beta/models/{model}:…` の全エンドポイント
 - **ログ表示**: `/logs` に記録される `request.system` / `instructions` は**行除去後** (=実際に上流へ送られた内容) を表示する。各ハンドラーは `finalSystemForLog()` で正規化した値を `startLog()` に渡す。Chat Completions パススルーは `body.messages` の `system` / `developer` を直接書き換えてから記録する。これにより除去が効いているかを `/logs` で確認できる
+
+### 最小ツール構成 (`--min`)
+
+クライアントが送ってきたツール定義のうち、エージェント実行・タスク管理・スケジューリングなど最小構成では不要なツールを、上流へ転送する前に名前で除外するフィルタ。クライアント (例: Claude Code) が大量のツールを送ってくる場合に、軽量なモデル・上流へ余計なツールを送らずに済ませる用途を想定する。
+
+- **指定方法**: CLI `--min` (boolean) または環境変数 `MIN_TOOLS` (`1` / `true`)。`config.minTools` に解決される。未指定時は何もしない
+- **除外対象**: `src/converters/shared.ts` の `MIN_EXCLUDED_TOOLS` (Set) に列挙したツール名と**完全一致**するものを除外する。現在の対象: `DesignSync` / `NotebookEdit` / `WaitForMcpServers` / `Monitor` / `PushNotification` / `ScheduleWakeup` / `TaskCreate` / `TaskGet` / `TaskList` / `TaskOutput` / `TaskStop` / `TaskUpdate` / `Agent` / `CronCreate` / `CronDelete` / `CronList` / `EnterWorktree` / `ExitWorktree` / `EnterPlanMode` / `ExitPlanMode` / `Skill` / `Workflow` / `mcp__ide__executeCode` / `mcp__ide__getDiagnostics`
+- **実装**: `filterMinTools<T extends { name: string }>(tools)` が `name` フィールドを持つツール定義配列 (Anthropic / Responses) から該当ツールを除去する。各ハンドラーは受信ボディをパース後、ツールを変換・ログ記録する前に `body.tools` を `filterMinTools()` で差し替える。Gemini 受信パスは `geminiToolsToAnthropic()` の結果に適用する。Chat Completions はツール名が `function.name` に入るため、`MIN_EXCLUDED_TOOLS` を使って `body.tools` をインライン除去する (パススルー・Gemini 変換の双方に効く)
+- **サーバー側ツール**: 組み込み Web 検索 (`google_search` / `WebSearch`) はクライアントツールではなくサーバー側で注入されるため `--min` の影響を受けない (無効化は `--no-search` / `NO_SEARCH`)
+- **適用範囲**: `/v1/messages`・`/v1/responses` (HTTP / WS)・`/v1/chat/completions` (パススルー / Gemini 変換)・`/v1beta/models/{model}:…` の全エンドポイント
+- **ログ表示**: 各ハンドラーは除外後の `body.tools` から `toolNames` を算出するため、`/logs` の `request.tools` は**除外後** (=実際に上流へ送られたツール) を表示する
 
 ## 変換ルール
 

@@ -2,7 +2,7 @@ import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
 import { highlightJson } from "../server.js";
-import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines } from "../converters/shared.js";
+import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines, MIN_EXCLUDED_TOOLS } from "../converters/shared.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import {
   chatMessagesToAnthropic,
@@ -71,6 +71,12 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   // system / developer メッセージから指定行を除去する。パススルー・変換・ログのすべてに反映させるため、
   // 分岐より前に body.messages へ適用する (startLog も除去後を記録する)
   stripSystemFromMessages(body.messages);
+
+  // --min 指定時は最小構成のツールのみ転送する。ChatTool は名前が function.name に入るため
+  // ここでインライン除去する (パススルー・変換・ログのすべてに反映させる)
+  if (config.minTools && body.tools) {
+    body.tools = body.tools.filter((t) => !MIN_EXCLUDED_TOOLS.has(t?.function?.name ?? ""));
+  }
 
   const passthrough = !isGoogleProvider(config.providerName);
   const toolNames = (body.tools ?? []).map((t) => t?.function?.name).filter(Boolean);
