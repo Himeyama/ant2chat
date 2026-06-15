@@ -10,7 +10,7 @@ import {
   chatToolChoiceToAnthropic,
 } from "../converters/from-chat-completions.js";
 import { googleSearchTool } from "../tools/google-search.js";
-import { startLog, finishLog, type LogEntry, type LogToolCall } from "../log-store.js";
+import { startLog, finishLog, redactHeaders, type LogEntry, type LogToolCall } from "../log-store.js";
 import {
   isGoogleProvider,
   getProvider,
@@ -95,6 +95,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     modelRequested: config.defaultModel && config.defaultModel !== requestedModel ? requestedModel : undefined,
     stream: body.stream ?? false,
     request: { messages: body.messages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
+    headers: redactHeaders(c.req.header()),
   });
 
   if (passthrough) {

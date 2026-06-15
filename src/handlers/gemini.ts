@@ -13,7 +13,7 @@ import {
   geminiThinkingToAnthropic,
 } from "../converters/from-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
-import { startLog, finishLog, type LogToolCall } from "../log-store.js";
+import { startLog, finishLog, redactHeaders, type LogToolCall } from "../log-store.js";
 import {
   isGoogleProvider,
   isResponsesProvider,
@@ -144,6 +144,7 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
     modelRequested: config.defaultModel && config.defaultModel !== modelFromPath ? modelFromPath : undefined,
     stream: isStream,
     request: { system: finalSystemForLog(system), messages: anthropicMessages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: anthropicChoice },
+    headers: redactHeaders(c.req.header()),
   });
 
   const languageModel = (

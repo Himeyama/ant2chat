@@ -602,6 +602,19 @@ export const logsPage = `<!DOCTYPE html>
       add('Speed', fmtSpeed(e));
       detailEl.appendChild(dl);
 
+      // ヘッダー (認証系はマスク済み)
+      if (e.headers && Object.keys(e.headers).length) {
+        var hdet = el('details');
+        hdet.appendChild(el('summary', null, 'ヘッダー (' + Object.keys(e.headers).length + ')'));
+        var hdl = el('dl', 'meta-grid');
+        Object.keys(e.headers).forEach(function (k) {
+          hdl.appendChild(el('dt', null, k));
+          hdl.appendChild(el('dd', null, e.headers[k]));
+        });
+        hdet.appendChild(hdl);
+        detailEl.appendChild(hdet);
+      }
+
       // プロンプト
       var msgs = requestToMessages(e.request);
       detailEl.appendChild(el('h2', null, 'プロンプト'));

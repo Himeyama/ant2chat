@@ -7,7 +7,7 @@ import { filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolCho
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import { googleSearchTool } from "../tools/google-search.js";
-import { startLog, finishLog, type LogToolCall } from "../log-store.js";
+import { startLog, finishLog, redactHeaders, type LogToolCall } from "../log-store.js";
 import {
   isGoogleProvider,
   isResponsesProvider,
@@ -140,6 +140,7 @@ export async function handleMessages(c: Context): Promise<Response> {
     stream: body.stream ?? false,
     // ログには行除去後 (実際に上流へ送る) の system を記録する
     request: { system: finalSystemForLog(system), messages: body.messages, tools: toolNames.length > 0 ? toolNames : undefined, tool_choice: body.tool_choice },
+    headers: redactHeaders(c.req.header()),
   });
 
   const messages = toMessages(body.messages, system, {

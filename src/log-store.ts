@@ -37,8 +37,44 @@ export interface LogEntry {
   durationMs: number;
   /** 元のリクエストボディ (プロンプト情報) */
   request: unknown;
+  /** 受信リクエストの HTTP ヘッダー (認証系はマスク済み) */
+  headers?: Record<string, string>;
   response?: LogResponse;
   error?: string;
+}
+
+// 値をマスクすべき認証・機密系ヘッダー (小文字で比較)
+const SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "x-api-key",
+  "x-goog-api-key",
+  "api-key",
+  "proxy-authorization",
+  "cookie",
+  "set-cookie",
+]);
+
+// 機密ヘッダー値をマスクする。"Bearer xxx" などのスキームは残し、トークンの先頭4・末尾4のみ見せる。
+function maskHeaderValue(value: string): string {
+  const m = value.match(/^(Bearer|Basic)\s+(.*)$/i);
+  const scheme = m ? m[1] + " " : "";
+  const token = m ? m[2] : value;
+  if (token.length <= 8) return scheme + "••••";
+  return scheme + token.slice(0, 4) + "…" + token.slice(-4);
+}
+
+// 受信ヘッダーをログ用に正規化する。Hono (Record<string,string>) と
+// Node IncomingMessage (string | string[]) の両方を受け付け、機密系の値はマスクする。
+export function redactHeaders(
+  headers: Record<string, string | string[] | undefined>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (v == null) continue;
+    const value = Array.isArray(v) ? v.join(", ") : String(v);
+    out[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? maskHeaderValue(value) : value;
+  }
+  return out;
 }
 
 const MAX_LOGS = 200;
@@ -56,6 +92,7 @@ export interface StartLogInit {
   modelRequested?: string;
   stream: boolean;
   request: unknown;
+  headers?: Record<string, string>;
 }
 
 // リクエスト開始時にエントリを作成して登録する。

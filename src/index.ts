@@ -36,7 +36,7 @@ server.on("upgrade", (req, socket, head) => {
     wss.handleUpgrade(req, socket, head, (ws) => {
       const auth = (req.headers["authorization"] as string | undefined) ?? "";
       const apiKey = auth.replace(/^Bearer\s+/i, "") || ((req.headers["x-api-key"] as string) ?? "");
-      handleResponsesWs(ws, apiKey).catch(console.error);
+      handleResponsesWs(ws, apiKey, req.headers).catch(console.error);
     });
   } else {
     socket.destroy();
