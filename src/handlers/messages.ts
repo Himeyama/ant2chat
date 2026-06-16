@@ -392,7 +392,9 @@ export async function handleMessages(c: Context): Promise<Response> {
           }
 
           const usage = await result.usage;
-          const outputTokens = usage?.completionTokens ?? 0;
+          // 上流が usage を返さないと NaN になる。NaN は JSON 化で null になるため || 0 でガード
+          const inputTokens = usage?.promptTokens || 0;
+          const outputTokens = usage?.completionTokens || 0;
           const finishReason = await result.finishReason;
           const stopReason = mapFinishReason(finishReason, sawToolCall);
           const { inputCacheTokens, outputCacheTokens } = await resolveCacheTokens(await result.providerMetadata, cacheCapture);
@@ -401,7 +403,7 @@ export async function handleMessages(c: Context): Promise<Response> {
           enqueue({ type: "message_stop" });
 
           finishLog(logEntry, {
-            inputTokens: usage?.promptTokens ?? 0,
+            inputTokens,
             inputCacheTokens,
             outputCacheTokens,
             outputTokens,
@@ -470,6 +472,9 @@ export async function handleMessages(c: Context): Promise<Response> {
       });
     }
 
+    // 上流が usage を返さないと NaN になる。NaN は JSON 化で null になるため || 0 でガード
+    const inputTokens = result.usage.promptTokens || 0;
+    const outputTokens = result.usage.completionTokens || 0;
     const response: AnthropicResponse = {
       id: msgId,
       type: "message",
@@ -479,17 +484,17 @@ export async function handleMessages(c: Context): Promise<Response> {
       stop_reason: stopReason,
       stop_sequence: null,
       usage: {
-        input_tokens: result.usage.promptTokens,
-        output_tokens: result.usage.completionTokens,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
       },
     };
 
     const { inputCacheTokens, outputCacheTokens } = await resolveCacheTokens(result.providerMetadata, cacheCapture);
     finishLog(logEntry, {
-      inputTokens: result.usage.promptTokens,
+      inputTokens,
       inputCacheTokens,
       outputCacheTokens,
-      outputTokens: result.usage.completionTokens,
+      outputTokens,
       response: {
         text: result.text || undefined,
         toolCalls: toolCalls.length > 0 ? toolCalls.map((c) => ({ name: c.toolName, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })) : undefined,

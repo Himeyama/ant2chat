@@ -131,15 +131,24 @@ export function getProvider(apiKey: string, capture?: CacheCapture) {
     // 既定 (x-goog-api-key)。relay 時に中継先が Google 認証を要求しないケースでもキー欠如で SDK が落ちないようプレースホルダを補う。
     return createGoogleGenerativeAI({ apiKey: geminiRelayURL ? (apiKey || "relay") : apiKey, ...urlOpts });
   }
+  // OpenAI 系 (openai / responses / azure) は strict 互換にする。strict のときだけ SDK が
+  // streaming で stream_options: { include_usage: true } を送り、上流が usage チャンクを返す。
+  // compatible だと usage が要求されず、ストリーミングの result.usage が NaN になり
+  // (JSON 化で null → /logs でトークン 0 表示)。ollama / openrouter / custom は usage を
+  // 自発的に返すため compatible のままにして、未知の上流へ余計なフィールドを送らない。
+  const compatibility: "strict" | "compatible" =
+    providerName === "openai" || providerName === "responses" || providerName === "azure"
+      ? "strict"
+      : "compatible";
   if (authType === "api-key") {
     return createOpenAI({
       apiKey: "no-key",
       baseURL,
       headers: { "api-key": apiKey },
-      compatibility: "compatible",
+      compatibility,
     });
   }
-  return createOpenAI({ apiKey, baseURL, compatibility: "compatible" });
+  return createOpenAI({ apiKey, baseURL, compatibility });
 }
 
 export function resolveModel(requestedModel: string): string {

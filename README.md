@@ -191,6 +191,7 @@ ant2chat 自身は受信リクエストを認証しない。上流へ渡す API 
 - 料金表に「1 USD = N JPY」の為替レートを設定すると、コストを `$X.XXXXXX (JPY NNN)` 形式で円換算表示する (未設定なら $ のみ)
 - 入力トークンにはキャッシュ分が含まれる。コストはキャッシュ分を入力単価から差し引き、入力キャッシュ単価で計算する
 - 入力キャッシュは OpenAI 系 (`cached_tokens`) に加え、Gemini (`cachedContentTokenCount`) も記録する。Gemini はキャッシュ数を SDK が捨てるため、上流レスポンスを覗いて回収している (ストリーミング・非ストリーミング両対応)
+- ストリーミングでも上流が usage を返すよう、OpenAI 系プロバイダー (`openai` / `responses` / `azure`) には `stream_options: { include_usage: true }` を要求する (`compatibility: "strict"`)。これがないと上流が usage を返さず、トークンが 0 (空欄) と表示される。usage を返さない上流に対しては 0 として記録する
 - 一覧が横に長いときはテーブルを横スクロールできる
 - 行をクリックすると、概要・受信ヘッダー (折りたたみ)・送信したプロンプト (ロール別)・レスポンス本文・生 JSON を表示する
 - 受信リクエストの HTTP ヘッダーも記録する。`Authorization` / `x-api-key` / `x-goog-api-key` / `api-key` / `Cookie` などの認証・機密系は値をマスクして表示する (スキームと先頭・末尾の数文字のみ)。それ以外のヘッダーはそのまま表示する

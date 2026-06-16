@@ -221,8 +221,9 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
 
           const usage = await result.usage;
           const finishReason = await result.finishReason;
-          const promptTokens = usage?.promptTokens ?? 0;
-          const completionTokens = usage?.completionTokens ?? 0;
+          // 上流が usage を返さないと NaN になる。NaN は JSON 化で null になるため || 0 でガード
+          const promptTokens = usage?.promptTokens || 0;
+          const completionTokens = usage?.completionTokens || 0;
           const { inputCacheTokens, outputCacheTokens } = await resolveCacheTokens(await result.providerMetadata, cacheCapture);
 
           const usageMetadata: GeminiUsageMetadata = {
@@ -295,8 +296,9 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
       parts.push({ functionCall: { name: call.toolName, args: stripEmptyStringValues(call.args) } });
     }
 
-    const promptTokens = result.usage.promptTokens;
-    const completionTokens = result.usage.completionTokens;
+    // 上流が usage を返さないと NaN になる。NaN は JSON 化で null になるため || 0 でガード
+    const promptTokens = result.usage.promptTokens || 0;
+    const completionTokens = result.usage.completionTokens || 0;
     const { inputCacheTokens, outputCacheTokens } = await resolveCacheTokens(result.providerMetadata, cacheCapture);
 
     const usageMetadata: GeminiUsageMetadata = {
