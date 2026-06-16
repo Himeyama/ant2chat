@@ -261,7 +261,7 @@ curl -N 'http://localhost:3000/v1beta/models/llama3.2:streamGenerateContent?alt=
 
 リクエストの `thinking` フィールドで reasoning モデルの思考を制御できる。プロバイダーごとに適切な形式へ変換される。
 
-- **Google / Gemini**: `thinkingBudget` (トークン予算) と `includeThoughts` に変換
+- **Google / Gemini**: `thinkingBudget` (トークン予算) と `includeThoughts` に変換。`disabled` は `thinkingBudget: 0` だが、思考をオフにできない gemini-2.5-pro 系 (モデル名に `pro` を含む) には送らずモデルのデフォルトに任せる (`thinking_budget to 0` 拒否エラーの回避)
 - **OpenAI / responses**: `budget_tokens` を `reasoningEffort` (`low` / `medium` / `high`) にマッピング。`responses` では思考要約も有効化
 - **ollama / その他**: 無視される
 

@@ -156,7 +156,7 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
       : provider(model)
   ) as LanguageModelV1;
 
-  const providerOptions = toProviderOptions(thinking, config.providerName);
+  const providerOptions = toProviderOptions(thinking, config.providerName, model);
   const stopSequences = generationConfig?.stopSequences;
 
   const commonParams = {

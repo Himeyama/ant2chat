@@ -201,7 +201,7 @@ ant2chat 自身は受信リクエストを認証しない (将来の `--proxy-ke
 
 リクエストの `thinking` フィールド (`{ type: "enabled", budget_tokens }` / `{ type: "disabled" }`) を `toProviderOptions()` で各プロバイダーの `providerOptions` に変換し、`generateText` / `streamText` に渡す。
 
-- **Google / Gemini**: `providerOptions.google.thinkingConfig` に変換。`enabled` 時は `{ thinkingBudget: budget_tokens, includeThoughts: true }`、`disabled` 時は `{ thinkingBudget: 0 }`
+- **Google / Gemini**: `providerOptions.google.thinkingConfig` に変換。`enabled` 時は `{ thinkingBudget: budget_tokens, includeThoughts: true }`、`disabled` 時は `{ thinkingBudget: 0 }`。ただし **gemini-2.5-pro 系のモデルは思考をオフにできず `thinkingBudget: 0` を拒否する** (`The model does not support setting thinking_budget to 0` エラー) ため、モデル名に `pro` を含む場合 (`geminiSupportsDisablingThinking()` が `false`) は `disabled` でも `thinkingConfig` を送らず、モデル側のデフォルト (動的思考) に委ねる。`toProviderOptions()` は判定のため解決済みモデル名を引数に取る
 - **OpenAI / responses**: `providerOptions.openai.reasoningEffort` に変換。`budget_tokens` を段階へマッピング (`< 8192` → `low`、`< 24576` → `medium`、それ以上 → `high`)。`responses` プロバイダーでは加えて `reasoningSummary: "auto"` を設定し思考要約を有効化。`disabled` 時は何も設定しない
 - **ollama / その他**: `thinking` は無視 (reasoning モデルはモデル側で出力を制御するため)
 

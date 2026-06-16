@@ -34,22 +34,37 @@ function budgetToReasoningEffort(budget: number): "low" | "medium" | "high" {
   return "high";
 }
 
+// gemini-2.5-pro 系の thinking モデルは思考をオフにできない (thinkingBudget: 0 を拒否し
+// "The model does not support setting thinking_budget to 0" エラーになる)。
+// flash / flash-lite 系のみ 0 を受け付ける。
+function geminiSupportsDisablingThinking(model: string): boolean {
+  return !/pro/i.test(model);
+}
+
 // Anthropic の thinking フィールドを各プロバイダーの providerOptions に変換する。
 //  - Google/Gemini: thinkingConfig.thinkingBudget (トークン予算) + includeThoughts
 //  - OpenAI/responses: reasoningEffort (budget_tokens から段階を導出)。responses は思考要約も有効化
 export function toProviderOptions(
   thinking: AnthropicThinkingConfig | undefined,
-  providerName: string
+  providerName: string,
+  model: string
 ): Record<string, Record<string, JSONValue>> | undefined {
   if (!thinking) return undefined;
 
   if (isGoogleProvider(providerName)) {
+    if (thinking.type === "enabled") {
+      return {
+        google: {
+          thinkingConfig: { thinkingBudget: thinking.budget_tokens, includeThoughts: true },
+        },
+      };
+    }
+    // disabled: thinkingBudget 0 で思考を無効化する。ただし gemini-2.5-pro 系は 0 を
+    // 受け付けないため、thinkingConfig を送らずモデル側のデフォルト (動的思考) に任せる。
+    if (!geminiSupportsDisablingThinking(model)) return undefined;
     return {
       google: {
-        thinkingConfig:
-          thinking.type === "enabled"
-            ? { thinkingBudget: thinking.budget_tokens, includeThoughts: true }
-            : { thinkingBudget: 0 },
+        thinkingConfig: { thinkingBudget: 0 },
       },
     };
   }
@@ -177,7 +192,7 @@ export async function handleMessages(c: Context): Promise<Response> {
       : provider(model)
   ) as LanguageModelV1;
 
-  const providerOptions = toProviderOptions(body.thinking, config.providerName);
+  const providerOptions = toProviderOptions(body.thinking, config.providerName, model);
 
   const commonParams = {
     model: languageModel,
