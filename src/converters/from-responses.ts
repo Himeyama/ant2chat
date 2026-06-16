@@ -50,17 +50,31 @@ export function toMessagesFromResponses(
     }
   }
 
+  // user/assistant/tool メッセージを見た後は system/developer をスキップする。
+  // Google SDK など一部のプロバイダーは会話の先頭以外に system ロールがあるとエラーになる。
+  let seenNonSystem = false;
   let i = 0;
   while (i < input.length) {
     const item = input[i];
 
     // role を持つ通常メッセージ (type が "message" または未指定)
     if ("role" in item) {
-      result.push(inputMessageToCore(item as ResponseInputMessage));
+      const msg = item as ResponseInputMessage;
+      if (msg.role === "system" || msg.role === "developer") {
+        if (!seenNonSystem) {
+          result.push(inputMessageToCore(msg));
+        }
+        // user/assistant 登場後の system/developer は無視 (Gemini など非対応プロバイダー向け)
+        i++;
+        continue;
+      }
+      seenNonSystem = true;
+      result.push(inputMessageToCore(msg));
       i++;
       continue;
     }
 
+    seenNonSystem = true;
     // function_call: 連続する呼び出しをまとめて assistant ツール呼び出しメッセージにする
     if ((item as ResponseFunctionCall).type === "function_call") {
       const calls: ResponseFunctionCall[] = [];

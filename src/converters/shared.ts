@@ -236,7 +236,11 @@ export function toMessages(
     const content = msg.content;
 
     if (typeof content === "string") {
-      result.push({ role: msg.role, content });
+      // Anthropic spec は user/assistant のみ。それ以外 (例: system が紛れ込んだ場合) は
+      // Google SDK など一部プロバイダーがエラーにするためスキップする。
+      if (msg.role === "user" || msg.role === "assistant") {
+        result.push({ role: msg.role, content });
+      }
       continue;
     }
 
