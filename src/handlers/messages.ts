@@ -6,6 +6,7 @@ import { highlightJson } from "../server.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
+import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart } from "../converters/salvage-tool-calls.js";
 import { googleSearchTool } from "../tools/google-search.js";
 import { startLog, finishLog, redactHeaders, type LogToolCall } from "../log-store.js";
 import {
@@ -186,6 +187,11 @@ export async function handleMessages(c: Context): Promise<Response> {
   const toolChoice = isServerToolChoice ? undefined : toToolChoice(body.tool_choice);
   const msgId = makeMessageId();
 
+  // Gemini はツール呼び出しをテキスト(JSON)で出力してしまうことがあるため、
+  // Google プロバイダー時のみ出力テキストからツール呼び出しを復元する
+  const salvageEnabled = isGoogleProvider(config.providerName);
+  const knownToolNames = buildKnownToolNames(toolNames);
+
   const languageModel = (
     isResponsesProvider(config.providerName)
       ? (provider as ReturnType<typeof createOpenAI>).responses(model)
@@ -229,6 +235,11 @@ export async function handleMessages(c: Context): Promise<Response> {
         let sawToolCall = false;
         let loggedText = "";
         const loggedToolCalls: LogToolCall[] = [];
+        // Gemini のツール呼び出しテキスト化対策: 先頭がツール呼び出しの可能性があるテキストは
+        // バッファして、ストリーム終了時に salvage で復元できるか判定する。
+        // salvage 無効時 (Google 以外) は常に live でそのまま送出する。
+        let textBuffer = "";
+        let textMode: "undecided" | "live" | "buffer" = salvageEnabled ? "undecided" : "live";
 
         const openTextBlock = () => {
           if (textBlockIndex !== null) return;
@@ -286,13 +297,33 @@ export async function handleMessages(c: Context): Promise<Response> {
                 break;
               }
               case "text-delta": {
-                openTextBlock();
-                loggedText += part.textDelta;
-                enqueue({
-                  type: "content_block_delta",
-                  index: textBlockIndex!,
-                  delta: { type: "text_delta", text: part.textDelta },
-                });
+                if (textMode === "live") {
+                  openTextBlock();
+                  loggedText += part.textDelta;
+                  enqueue({
+                    type: "content_block_delta",
+                    index: textBlockIndex!,
+                    delta: { type: "text_delta", text: part.textDelta },
+                  });
+                  break;
+                }
+                // undecided / buffer: 蓄積し、先頭の形で送出方式を決める
+                textBuffer += part.textDelta;
+                if (textMode === "undecided") {
+                  const cls = classifyStreamStart(textBuffer);
+                  if (cls === "text") {
+                    textMode = "live";
+                    openTextBlock();
+                    loggedText += textBuffer;
+                    enqueue({
+                      type: "content_block_delta",
+                      index: textBlockIndex!,
+                      delta: { type: "text_delta", text: textBuffer },
+                    });
+                  } else if (cls === "tool") {
+                    textMode = "buffer";
+                  }
+                }
                 break;
               }
               case "tool-call-streaming-start": {
@@ -387,6 +418,36 @@ export async function handleMessages(c: Context): Promise<Response> {
             }
           }
 
+          // バッファ済みテキストを確定処理する (ツール呼び出しを復元 or 通常テキストとして送出)
+          if (textBuffer && textMode !== "live") {
+            const salv =
+              salvageEnabled && !sawToolCall
+                ? salvageToolCallsFromText(textBuffer, knownToolNames)
+                : { toolCalls: [], text: textBuffer };
+            if (salv.toolCalls.length > 0) {
+              if (salv.text) {
+                openTextBlock();
+                loggedText += salv.text;
+                enqueue({ type: "content_block_delta", index: textBlockIndex!, delta: { type: "text_delta", text: salv.text } });
+              }
+              for (const call of salv.toolCalls) {
+                const id = makeToolUseId();
+                const index = nextIndex++;
+                openBlocks.add(index);
+                enqueue({ type: "content_block_start", index, content_block: { type: "tool_use", id, name: call.name, input: {} } });
+                const argsJson = JSON.stringify(stripEmptyStringValues(call.args));
+                loggedToolCalls.push({ name: call.name, arguments: argsJson });
+                enqueue({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: argsJson } });
+                sawToolCall = true;
+              }
+            } else {
+              // ツール呼び出しではなかった: 通常テキストとして送出する
+              openTextBlock();
+              loggedText += textBuffer;
+              enqueue({ type: "content_block_delta", index: textBlockIndex!, delta: { type: "text_delta", text: textBuffer } });
+            }
+          }
+
           for (const index of openBlocks) {
             enqueue({ type: "content_block_stop", index });
           }
@@ -435,7 +496,19 @@ export async function handleMessages(c: Context): Promise<Response> {
     const result = await generateText(commonParams);
     // サーバー側ツールは内部実行済みのためクライアントには返さない
     const toolCalls = (result.toolCalls ?? []).filter(c => !serverToolNames.has(c.toolName));
-    const hasToolCalls = toolCalls.length > 0;
+
+    // ネイティブのツール呼び出しが無く、テキストにツール呼び出しが紛れている場合は復元する
+    let responseText = result.text;
+    const salvagedCalls =
+      salvageEnabled && toolCalls.length === 0 && responseText
+        ? (() => {
+            const s = salvageToolCallsFromText(responseText, knownToolNames);
+            if (s.toolCalls.length > 0) responseText = s.text;
+            return s.toolCalls;
+          })()
+        : [];
+
+    const hasToolCalls = toolCalls.length > 0 || salvagedCalls.length > 0;
     const stopReason = mapFinishReason(result.finishReason, hasToolCalls);
 
     const content: AnthropicResponseContent[] = [];
@@ -460,14 +533,22 @@ export async function handleMessages(c: Context): Promise<Response> {
     } else if (result.reasoning) {
       content.push({ type: "thinking", thinking: result.reasoning });
     }
-    if (result.text) {
-      content.push({ type: "text", text: result.text });
+    if (responseText) {
+      content.push({ type: "text", text: responseText });
     }
     for (const call of toolCalls) {
       content.push({
         type: "tool_use",
         id: call.toolCallId || makeToolUseId(),
         name: call.toolName,
+        input: stripEmptyStringValues(call.args),
+      });
+    }
+    for (const call of salvagedCalls) {
+      content.push({
+        type: "tool_use",
+        id: makeToolUseId(),
+        name: call.name,
         input: stripEmptyStringValues(call.args),
       });
     }
@@ -496,8 +577,13 @@ export async function handleMessages(c: Context): Promise<Response> {
       outputCacheTokens,
       outputTokens,
       response: {
-        text: result.text || undefined,
-        toolCalls: toolCalls.length > 0 ? toolCalls.map((c) => ({ name: c.toolName, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })) : undefined,
+        text: responseText || undefined,
+        toolCalls: hasToolCalls
+          ? [
+              ...toolCalls.map((c) => ({ name: c.toolName, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })),
+              ...salvagedCalls.map((c) => ({ name: c.name, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })),
+            ]
+          : undefined,
         stopReason,
       },
     });

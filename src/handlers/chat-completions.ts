@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { highlightJson } from "../server.js";
 import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines, MIN_EXCLUDED_TOOLS } from "../converters/shared.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
+import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart } from "../converters/salvage-tool-calls.js";
 import {
   chatMessagesToAnthropic,
   chatToolsToAnthropic,
@@ -348,6 +349,11 @@ async function handleViaConversion(
   const id = makeId("chatcmpl-");
   const created = Math.floor(Date.now() / 1000);
 
+  // 変換パスは Gemini 専用。ツール呼び出しがテキスト(JSON)化された場合に復元する
+  const knownToolNames = buildKnownToolNames(
+    (body.tools ?? []).map((t) => t?.function?.name ?? "").filter(Boolean)
+  );
+
   // ストリーミング
   if (body.stream) {
     const stream = new ReadableStream({
@@ -367,6 +373,10 @@ async function handleViaConversion(
         let sawToolCall = false;
         let loggedText = "";
         const loggedToolCalls: LogToolCall[] = [];
+        // Gemini のツール呼び出しテキスト化対策: 先頭がツール呼び出しの可能性があるテキストは
+        // バッファして、ストリーム終了時に salvage で復元できるか判定する。
+        let textBuffer = "";
+        let textMode: "undecided" | "live" | "buffer" = "undecided";
         const ensureRole = () => {
           if (roleSent) return;
           send(chunk([{ index: 0, delta: { role: "assistant" }, finish_reason: null }]));
@@ -397,9 +407,25 @@ async function handleViaConversion(
           for await (const part of result.fullStream) {
             switch (part.type) {
               case "text-delta": {
-                ensureRole();
-                loggedText += part.textDelta;
-                send(chunk([{ index: 0, delta: { content: part.textDelta }, finish_reason: null }]));
+                if (textMode === "live") {
+                  ensureRole();
+                  loggedText += part.textDelta;
+                  send(chunk([{ index: 0, delta: { content: part.textDelta }, finish_reason: null }]));
+                  break;
+                }
+                // undecided / buffer: 蓄積し、先頭の形で送出方式を決める
+                textBuffer += part.textDelta;
+                if (textMode === "undecided") {
+                  const cls = classifyStreamStart(textBuffer);
+                  if (cls === "text") {
+                    textMode = "live";
+                    ensureRole();
+                    loggedText += textBuffer;
+                    send(chunk([{ index: 0, delta: { content: textBuffer }, finish_reason: null }]));
+                  } else if (cls === "tool") {
+                    textMode = "buffer";
+                  }
+                }
                 break;
               }
               case "tool-call-streaming-start": {
@@ -436,6 +462,32 @@ async function handleViaConversion(
                 throw part.error;
               default:
                 break;
+            }
+          }
+
+          // バッファ済みテキストを確定処理する (ツール呼び出しを復元 or 通常テキストとして送出)
+          if (textBuffer && textMode !== "live") {
+            const salv = !sawToolCall
+              ? salvageToolCallsFromText(textBuffer, knownToolNames)
+              : { toolCalls: [], text: textBuffer };
+            if (salv.toolCalls.length > 0) {
+              ensureRole();
+              if (salv.text) {
+                loggedText += salv.text;
+                send(chunk([{ index: 0, delta: { content: salv.text }, finish_reason: null }]));
+              }
+              for (const call of salv.toolCalls) {
+                const entry = ensureToolStart(makeId("call_"), call.name);
+                const argsJson = JSON.stringify(stripEmptyStringValues(call.args));
+                loggedToolCalls.push({ name: call.name, arguments: argsJson });
+                send(chunk([{ index: 0, delta: { tool_calls: [{ index: entry.index, function: { arguments: argsJson } }] }, finish_reason: null }]));
+                entry.argsEmitted = true;
+                sawToolCall = true;
+              }
+            } else {
+              ensureRole();
+              loggedText += textBuffer;
+              send(chunk([{ index: 0, delta: { content: textBuffer }, finish_reason: null }]));
             }
           }
 
@@ -485,12 +537,31 @@ async function handleViaConversion(
   try {
     const result = await generateText(commonParams);
     const toolCalls = (result.toolCalls ?? []).filter((tc) => !serverToolNames.has(tc.toolName));
-    const hasToolCalls = toolCalls.length > 0;
-    const ccToolCalls: ChatToolCall[] = toolCalls.map((tc) => ({
-      id: tc.toolCallId || makeId("call_"),
-      type: "function",
-      function: { name: tc.toolName, arguments: JSON.stringify(stripEmptyStringValues(tc.args)) },
-    }));
+
+    // ネイティブのツール呼び出しが無く、テキストにツール呼び出しが紛れている場合は復元する
+    let responseText = result.text;
+    const salvagedCalls =
+      toolCalls.length === 0 && responseText
+        ? (() => {
+            const s = salvageToolCallsFromText(responseText, knownToolNames);
+            if (s.toolCalls.length > 0) responseText = s.text;
+            return s.toolCalls;
+          })()
+        : [];
+
+    const ccToolCalls: ChatToolCall[] = [
+      ...toolCalls.map((tc) => ({
+        id: tc.toolCallId || makeId("call_"),
+        type: "function" as const,
+        function: { name: tc.toolName, arguments: JSON.stringify(stripEmptyStringValues(tc.args)) },
+      })),
+      ...salvagedCalls.map((c) => ({
+        id: makeId("call_"),
+        type: "function" as const,
+        function: { name: c.name, arguments: JSON.stringify(stripEmptyStringValues(c.args)) },
+      })),
+    ];
+    const hasToolCalls = ccToolCalls.length > 0;
 
     const response: ChatCompletionResponse = {
       id,
@@ -502,7 +573,7 @@ async function handleViaConversion(
           index: 0,
           message: {
             role: "assistant",
-            content: result.text || null,
+            content: responseText || null,
             ...(ccToolCalls.length > 0 ? { tool_calls: ccToolCalls } : {}),
           },
           finish_reason: mapChatFinish(result.finishReason, hasToolCalls),
@@ -522,7 +593,7 @@ async function handleViaConversion(
       outputCacheTokens,
       outputTokens: result.usage.completionTokens,
       response: {
-        text: result.text || undefined,
+        text: responseText || undefined,
         toolCalls: ccToolCalls.length > 0 ? ccToolCalls.map((tc) => ({ name: tc.function.name, arguments: tc.function.arguments })) : undefined,
       },
     });

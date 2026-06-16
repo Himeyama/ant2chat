@@ -80,7 +80,8 @@ src/
 │   ├── to-gemini.ts             # Anthropic ツール定義 → Gemini ToolSet
 │   ├── from-responses.ts        # Responses API 入力 → CoreMessage / ToolSet / ToolChoice
 │   ├── from-chat-completions.ts # Chat Completions 入力 → Anthropic メッセージ / Tool / ToolChoice (Gemini 変換用アダプタ)
-│   └── from-gemini.ts           # Gemini 入力 → Anthropic メッセージ / Tool / ToolChoice / thinking (受信用アダプタ)
+│   ├── from-gemini.ts           # Gemini 入力 → Anthropic メッセージ / Tool / ToolChoice / thinking (受信用アダプタ)
+│   └── salvage-tool-calls.ts    # Gemini がテキスト(JSON)で出力したツール呼び出しを復元 (サルベージ)
 ├── tools/
 │   └── google-search.ts         # 組み込み Web 検索ツール
 └── types/
@@ -329,6 +330,19 @@ Google Gemini API 互換の**受信**エンドポイント (`handleGenerateConte
 ### Google / Gemini プロバイダーの制約
 
 `--provider google` / `--provider gemini` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` を `functionCall` パーツではなくテキストに変換する (`flattenToolHistory`)。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT` エラーを回避する。
+
+### Gemini: ツール呼び出しテキスト化のサルベージ
+
+`flattenToolHistory` の副作用として、Gemini は履歴中の `[Tool Use: ...] { JSON }` というテキスト表現を模倣し、**新しいツール呼び出しをネイティブの `functionCall` ではなくテキスト (JSON) として出力**してしまうことがある (とくにツールを 1 往復した後のマルチターンで発生しやすい)。そのままだと AI SDK はツール呼び出しと認識せず `result.text` に入り、クライアントへ「JSON のようなものがそのまま」返ってしまう。
+
+これを防ぐため、`src/converters/salvage-tool-calls.ts` が **出力テキストからツール呼び出しを復元 (サルベージ)** する。Google プロバイダー時 (`isGoogleProvider`)、かつネイティブのツール呼び出しが 1 件も無い場合のみ、出力テキストを解析して既知ツール名に一致するツール呼び出しへ組み直す。Chat Completions の Gemini 変換パスは常に有効 (変換パス = Gemini 専用)。
+
+- **対象フォーマット**: `salvageToolCallsFromText(text, known)` が次を拾う。
+  1. 平坦化フォーマットの echo `[Tool Use: NAME]\n{ ...JSON... }`
+  2. 素の JSON / コードフェンス (```` ```json ````・```` ```tool_code ```` など) 内のツール呼び出し包み: `{name|tool|tool_name|toolName|function|recipient_name}` + `{args|arguments|parameters|input|tool_input}`、`{functionCall:{...}}` / `{function:{...}}` のネスト、`arguments` が JSON 文字列のケース、`default_api.` プレフィックス除去
+- **誤検出防止**: `name` が**既知ツール集合に一致する場合のみ**復元する (`buildKnownToolNames` が宣言名とサニタイズ名の両方を登録)。一致しなければテキストのまま返す。ツール呼び出しを取り除いた残りのテキストは text パートとして保持する
+- **ストリーミング**: テキストデルタの先頭が `classifyStreamStart()` でツール呼び出しの始まり (`{` / `[Tool Use:` / `json|tool` 言語のフェンス) と判定された場合のみバッファし、ストリーム終了時に salvage する。判定できない (`undecided`) 間は送出を保留して次のデルタを待つ。ツール呼び出しでない通常テキスト (先頭が `{` 等でない) はそのまま逐次 live 送出するため、ストリーミング体感は維持される
+- **適用範囲 / 出力形式**: `/v1/messages` (`tool_use` ブロック)・`/v1beta/models/{model}:…` (`functionCall` パート)・`/v1/chat/completions` の Gemini 変換パス (`tool_calls`)。各パスとも stream / non-stream 両対応。復元したツール呼び出しは `stop_reason` / `finishReason` / `finish_reason` のツール判定に反映され、`/logs` の `response.toolCalls` にも記録される
 
 ### Gemini: 認証ヘッダー
 

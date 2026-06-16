@@ -284,6 +284,17 @@ curl -N 'http://localhost:3000/v1beta/models/llama3.2:streamGenerateContent?alt=
 
 `--provider google` / `--provider gemini` 使用時、マルチターン会話で過去の `tool_use` / `tool_result` をテキスト形式に変換する。Gemini 思考モデルはツール呼び出し履歴に `thought_signature` を要求するが、Anthropic フォーマットにその概念がないため署名が失われる。テキスト形式で代替することで `INVALID_ARGUMENT (400)` エラーを回避する。
 
+### Gemini: ツール呼び出しテキスト化のサルベージ
+
+上記のテキスト平坦化の副作用で、Gemini は履歴の `[Tool Use: ...] { JSON }` というパターンを模倣し、**新しいツール呼び出しを本来の `functionCall` ではなくテキスト (JSON) で出力**してしまうことがある（ツールを 1 往復した後のマルチターンで起きやすい）。そのままだとクライアントには「JSON のようなもの」がテキストとして返ってしまう。
+
+これを防ぐため、Google プロバイダー時は **出力テキストからツール呼び出しを自動復元（サルベージ）** する。ネイティブのツール呼び出しが 1 件も無い場合に限り、出力テキストを解析して既知ツール名に一致する呼び出しを `tool_use` / `functionCall` / `tool_calls` へ組み直す。
+
+- 復元対象: `[Tool Use: NAME]\n{ JSON }`、素の JSON や ```` ```json ```` / ```` ```tool_code ```` フェンス内の `{ "name": ..., "args"/"arguments"/"parameters": ... }`、`{"functionCall": {...}}` 等のネスト、`arguments` が文字列化された JSON
+- 既知ツール名に一致するものだけを復元するため、通常の JSON テキスト回答を誤ってツール呼び出し化しない
+- `/v1/messages`・`/v1beta/models/{model}:…`・`/v1/chat/completions`（Gemini 変換）の stream / non-stream すべてに効く。ストリーミングでは先頭がツール呼び出しらしいテキストのみバッファし、通常テキストは逐次そのまま流す
+- 設定は不要（自動）。誤検出は既知ツール名一致で抑止している
+
 ### Gemini: 認証ヘッダー
 
 google / gemini の認証ヘッダーは **デフォルトで `x-goog-api-key`** を使う。`--auth-type`（環境変数 `CHAT_AUTH_TYPE`）で切り替えられ、API キー（`-k` / `CHAT_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`）が選択したヘッダーに入る。

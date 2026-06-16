@@ -6,6 +6,7 @@ import { highlightJson } from "../server.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
+import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart } from "../converters/salvage-tool-calls.js";
 import {
   geminiContentsToAnthropic,
   geminiToolsToAnthropic,
@@ -127,6 +128,10 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
   const toolChoice = isServerToolChoice ? undefined : toToolChoice(anthropicChoice);
 
   const toolNames = anthropicTools?.map((t) => t.name) ?? [];
+  // Gemini はツール呼び出しをテキスト(JSON)で出力してしまうことがあるため、
+  // Google プロバイダー時のみ出力テキストからツール呼び出しを復元する
+  const salvageEnabled = isGoogleProvider(config.providerName);
+  const knownToolNames = buildKnownToolNames(toolNames);
   const summary: Record<string, unknown> = {
     endpoint: `/v1beta/models/:${action}`,
     model,
@@ -187,6 +192,10 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
         const loggedToolCalls: LogToolCall[] = [];
         // toolCallId -> args 送出済みフラグ (フィルタ後に一括送出)
         const emittedTools = new Set<string>();
+        // Gemini のツール呼び出しテキスト化対策: 先頭がツール呼び出しの可能性があるテキストは
+        // バッファして、ストリーム終了時に salvage で復元できるか判定する。
+        let textBuffer = "";
+        let textMode: "undecided" | "live" | "buffer" = salvageEnabled ? "undecided" : "live";
 
         try {
           const result = streamText(commonParams);
@@ -198,8 +207,23 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
                 break;
               }
               case "text-delta": {
-                loggedText += part.textDelta;
-                sendParts([{ text: part.textDelta }]);
+                if (textMode === "live") {
+                  loggedText += part.textDelta;
+                  sendParts([{ text: part.textDelta }]);
+                  break;
+                }
+                // undecided / buffer: 蓄積し、先頭の形で送出方式を決める
+                textBuffer += part.textDelta;
+                if (textMode === "undecided") {
+                  const cls = classifyStreamStart(textBuffer);
+                  if (cls === "text") {
+                    textMode = "live";
+                    loggedText += textBuffer;
+                    sendParts([{ text: textBuffer }]);
+                  } else if (cls === "tool") {
+                    textMode = "buffer";
+                  }
+                }
                 break;
               }
               case "tool-call": {
@@ -216,6 +240,29 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
                 throw part.error;
               default:
                 break;
+            }
+          }
+
+          // バッファ済みテキストを確定処理する (ツール呼び出しを復元 or 通常テキストとして送出)
+          if (textBuffer && textMode !== "live") {
+            const salv =
+              salvageEnabled && !sawToolCall
+                ? salvageToolCallsFromText(textBuffer, knownToolNames)
+                : { toolCalls: [], text: textBuffer };
+            if (salv.toolCalls.length > 0) {
+              if (salv.text) {
+                loggedText += salv.text;
+                sendParts([{ text: salv.text }]);
+              }
+              for (const call of salv.toolCalls) {
+                const args = stripEmptyStringValues(call.args);
+                loggedToolCalls.push({ name: call.name, arguments: JSON.stringify(args) });
+                sendParts([{ functionCall: { name: call.name, args } }]);
+                sawToolCall = true;
+              }
+            } else {
+              loggedText += textBuffer;
+              sendParts([{ text: textBuffer }]);
             }
           }
 
@@ -278,6 +325,17 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
     const toolCalls = (result.toolCalls ?? []).filter((tc) => !serverToolNames.has(tc.toolName));
     const stopReason = mapGeminiFinish(result.finishReason);
 
+    // ネイティブのツール呼び出しが無く、テキストにツール呼び出しが紛れている場合は復元する
+    let responseText = result.text;
+    const salvagedCalls =
+      salvageEnabled && toolCalls.length === 0 && responseText
+        ? (() => {
+            const s = salvageToolCallsFromText(responseText, knownToolNames);
+            if (s.toolCalls.length > 0) responseText = s.text;
+            return s.toolCalls;
+          })()
+        : [];
+
     const parts: GeminiPart[] = [];
     if (includeThoughts) {
       const reasoningDetails = (result as {
@@ -291,9 +349,12 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
         parts.push({ text: result.reasoning, thought: true });
       }
     }
-    if (result.text) parts.push({ text: result.text });
+    if (responseText) parts.push({ text: responseText });
     for (const call of toolCalls) {
       parts.push({ functionCall: { name: call.toolName, args: stripEmptyStringValues(call.args) } });
+    }
+    for (const call of salvagedCalls) {
+      parts.push({ functionCall: { name: call.name, args: stripEmptyStringValues(call.args) } });
     }
 
     // 上流が usage を返さないと NaN になる。NaN は JSON 化で null になるため || 0 でガード
@@ -325,9 +386,12 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
       outputCacheTokens,
       outputTokens: completionTokens,
       response: {
-        text: result.text || undefined,
-        toolCalls: toolCalls.length > 0
-          ? toolCalls.map((c) => ({ name: c.toolName, arguments: JSON.stringify(stripEmptyStringValues(c.args)) }))
+        text: responseText || undefined,
+        toolCalls: toolCalls.length > 0 || salvagedCalls.length > 0
+          ? [
+              ...toolCalls.map((c) => ({ name: c.toolName, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })),
+              ...salvagedCalls.map((c) => ({ name: c.name, arguments: JSON.stringify(stripEmptyStringValues(c.args)) })),
+            ]
           : undefined,
         stopReason,
       },
