@@ -4,6 +4,7 @@ import { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { createApp } from "./server.js";
 import { handleResponsesWs } from "./handlers/responses-ws.js";
+import { tuiLog } from "./tui-log.js";
 
 const { port, baseURL, authType, defaultModel, providerName, geminiRelayURL, geminiCache, geminiCacheTtl, global: globalListen } = config;
 const hostname = globalListen ? "0.0.0.0" : "127.0.0.1";
@@ -17,23 +18,26 @@ const server = serve({ fetch: app.fetch, port, hostname }, () => {
     providerName === "custom" ? "Custom (OpenAI-compatible)" :
     "Chat Completions";
   const displayHost = globalListen ? "0.0.0.0" : "localhost";
-  console.log(`→ ${apiLabel} proxy listening on http://${displayHost}:${port}`);
-  console.log(`  Provider:  ${providerName}`);
+  const bannerLines: string[] = [];
+  bannerLines.push(`→ ${apiLabel} proxy listening on http://${displayHost}:${port}`);
+  bannerLines.push(`  Provider:  ${providerName}`);
   if (geminiRelayURL) {
-    console.log(`  Upstream:  ${geminiRelayURL} (relay)`);
+    bannerLines.push(`  Upstream:  ${geminiRelayURL} (relay)`);
   } else if (baseURL) {
-    console.log(`  Upstream:  ${baseURL}`);
+    bannerLines.push(`  Upstream:  ${baseURL}`);
   }
-  console.log(`  Auth type: ${authType}`);
+  bannerLines.push(`  Auth type: ${authType}`);
   if (defaultModel) {
-    console.log(`  Model:     ${defaultModel} (forced)`);
+    bannerLines.push(`  Model:     ${defaultModel} (forced)`);
   } else {
-    console.log(`  Model:     (client-specified)`);
+    bannerLines.push(`  Model:     (client-specified)`);
   }
   if (geminiCache && (providerName === "google" || providerName === "gemini")) {
     const via = geminiRelayURL ? ", generate via relay" : "";
-    console.log(`  Cache:     explicit (CachedContent, ttl ${geminiCacheTtl}s${via})`);
+    bannerLines.push(`  Cache:     explicit (CachedContent, ttl ${geminiCacheTtl}s${via})`);
   }
+  for (const line of bannerLines) console.log(line);
+  tuiLog.setBanner(bannerLines);
 });
 
 const wss = new WebSocketServer({ noServer: true });
