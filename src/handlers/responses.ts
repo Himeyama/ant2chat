@@ -16,6 +16,7 @@ import {
   createCacheCapture,
   type CacheCapture,
   makeId,
+  NO_MODEL_FIELD_MESSAGE,
 } from "./provider.js";
 import type {
   ResponsesRequest,
@@ -304,7 +305,7 @@ export async function handleResponses(c: Context): Promise<Response> {
       {
         error: {
           code: "invalid_request",
-          message: 'No model specified. Provide a "model" field in the request, or start proxa with --model / CHAT_DEFAULT_MODEL.',
+          message: NO_MODEL_FIELD_MESSAGE,
         },
       },
       400

@@ -2,7 +2,7 @@ import type { IncomingHttpHeaders } from "node:http";
 import type { WebSocket } from "ws";
 import { config } from "../config.js";
 import { tuiLog } from "../tui-log.js";
-import { extractUpstreamError } from "./provider.js";
+import { extractUpstreamError, NO_MODEL_FIELD_MESSAGE } from "./provider.js";
 import { filterMinTools, finalSystemForLog } from "../converters/shared.js";
 import { startLog, finishLog, redactHeaders } from "../log-store.js";
 import { buildResponsesParams, emitStreamingLoop } from "./responses.js";
@@ -35,7 +35,7 @@ export async function handleResponsesWs(
         ws.send(JSON.stringify({
           type: "error",
           code: "invalid_request",
-          message: 'No model specified. Provide a "model" field in the request, or start proxa with --model / CHAT_DEFAULT_MODEL.',
+          message: NO_MODEL_FIELD_MESSAGE,
         }));
         ws.close();
         resolve();

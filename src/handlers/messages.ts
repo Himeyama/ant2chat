@@ -19,6 +19,7 @@ import {
   resolveCacheTokens,
   createCacheCapture,
   makeId,
+  NO_MODEL_FIELD_MESSAGE,
 } from "./provider.js";
 import type {
   AnthropicRequest,
@@ -121,7 +122,7 @@ export async function handleMessages(c: Context): Promise<Response> {
         type: "error",
         error: {
           type: "invalid_request_error",
-          message: 'No model specified. Provide a "model" field in the request, or start proxa with --model / CHAT_DEFAULT_MODEL.',
+          message: NO_MODEL_FIELD_MESSAGE,
         },
       },
       400

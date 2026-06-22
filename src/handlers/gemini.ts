@@ -23,6 +23,7 @@ import {
   extractUpstreamError,
   resolveCacheTokens,
   createCacheCapture,
+  NO_MODEL_PATH_MESSAGE,
 } from "./provider.js";
 import { toProviderOptions } from "./messages.js";
 import type {
@@ -88,7 +89,7 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
     return geminiError(
       c,
       400,
-      'No model specified. Provide a model in the URL path, or start proxa with --model / CHAT_DEFAULT_MODEL.'
+      NO_MODEL_PATH_MESSAGE
     );
   }
 

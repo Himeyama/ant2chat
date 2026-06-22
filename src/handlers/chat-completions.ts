@@ -22,6 +22,7 @@ import {
   resolveCacheTokens,
   createCacheCapture,
   makeId,
+  NO_MODEL_FIELD_MESSAGE,
 } from "./provider.js";
 import type {
   ChatMessage,
@@ -60,7 +61,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     return c.json(
       {
         error: {
-          message: 'No model specified. Provide a "model" field in the request, or start proxa with --model / CHAT_DEFAULT_MODEL.',
+          message: NO_MODEL_FIELD_MESSAGE,
           type: "invalid_request_error",
         },
       },
