@@ -166,6 +166,30 @@ export function salvageToolCallsFromText(text: string, known: Set<string>): Salv
   return { toolCalls: calls, text: residual };
 }
 
+// live 送出中のテキストから、ツール呼び出し echo ("[Tool Use:") の開始位置を探す。
+// 先頭が通常テキストと判定されて live モードに入った後でも、途中からツール呼び出しが
+// テキストとして現れることがある (Gemini が説明文の後に [Tool Use: ...] を吐くケース)。
+// この場合 live 送出を止めて残りをバッファし salvage へ回す必要がある。
+// 返り値:
+//  - emit: 即時 live 送出してよい先頭部分
+//  - hold: 保留する末尾。holdIsTool=true ならツールマーカー本体 (buffer モードへ移行)、
+//          false ならマーカー前置の可能性がある断片 (次のデルタを待つ)
+//  - holdIsTool: hold が確定したツールマーカー開始かどうか
+const TOOL_MARKER = "[Tool Use:";
+export function splitLiveToolMarker(text: string): { emit: string; hold: string; holdIsTool: boolean } {
+  const idx = text.indexOf(TOOL_MARKER);
+  if (idx !== -1) {
+    return { emit: text.slice(0, idx), hold: text.slice(idx), holdIsTool: true };
+  }
+  // 末尾が "[Tool Use:" の途中 (プレフィックス) かもしれない場合は保留して次のデルタを待つ。
+  for (let k = Math.min(text.length, TOOL_MARKER.length - 1); k >= 1; k--) {
+    if (text.endsWith(TOOL_MARKER.slice(0, k))) {
+      return { emit: text.slice(0, text.length - k), hold: text.slice(text.length - k), holdIsTool: false };
+    }
+  }
+  return { emit: text, hold: "", holdIsTool: false };
+}
+
 // ストリーミング時、先頭テキストがツール呼び出し (JSON / [Tool Use:] / コードフェンス) の
 // 始まりかを判定する。'undecided' はまだ判断材料が足りない状態 (バッファして待つ)。
 export function classifyStreamStart(text: string): "tool" | "text" | "undecided" {

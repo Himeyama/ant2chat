@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { highlightJson } from "../server.js";
 import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines, MIN_EXCLUDED_TOOLS } from "../converters/shared.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
-import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart } from "../converters/salvage-tool-calls.js";
+import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart, splitLiveToolMarker } from "../converters/salvage-tool-calls.js";
 import {
   chatMessagesToAnthropic,
   chatToolsToAnthropic,
@@ -377,6 +377,8 @@ async function handleViaConversion(
         // バッファして、ストリーム終了時に salvage で復元できるか判定する。
         let textBuffer = "";
         let textMode: "undecided" | "live" | "buffer" = "undecided";
+        // live モード中、ツールマーカーの前置プレフィックスかもしれない末尾を保留するバッファ
+        let liveHold = "";
         const ensureRole = () => {
           if (roleSent) return;
           send(chunk([{ index: 0, delta: { role: "assistant" }, finish_reason: null }]));
@@ -408,9 +410,21 @@ async function handleViaConversion(
             switch (part.type) {
               case "text-delta": {
                 if (textMode === "live") {
-                  ensureRole();
-                  loggedText += part.textDelta;
-                  send(chunk([{ index: 0, delta: { content: part.textDelta }, finish_reason: null }]));
+                  // live 中でも [Tool Use:] echo の出現を監視し、見つかったら残りを buffer へ回す
+                  liveHold += part.textDelta;
+                  const { emit, hold, holdIsTool } = splitLiveToolMarker(liveHold);
+                  if (emit) {
+                    ensureRole();
+                    loggedText += emit;
+                    send(chunk([{ index: 0, delta: { content: emit }, finish_reason: null }]));
+                  }
+                  if (holdIsTool) {
+                    textMode = "buffer";
+                    textBuffer = hold;
+                    liveHold = "";
+                  } else {
+                    liveHold = hold;
+                  }
                   break;
                 }
                 // undecided / buffer: 蓄積し、先頭の形で送出方式を決める
@@ -465,6 +479,13 @@ async function handleViaConversion(
             }
           }
 
+          // live モードで保留した末尾 (未完のマーカープレフィックス) が残っていれば通常テキストとして送出する
+          if (textMode === "live" && liveHold) {
+            ensureRole();
+            loggedText += liveHold;
+            send(chunk([{ index: 0, delta: { content: liveHold }, finish_reason: null }]));
+            liveHold = "";
+          }
           // バッファ済みテキストを確定処理する (ツール呼び出しを復元 or 通常テキストとして送出)
           if (textBuffer && textMode !== "live") {
             const salv = !sawToolCall

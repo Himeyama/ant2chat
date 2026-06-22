@@ -6,7 +6,7 @@ import { highlightJson } from "../server.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
-import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart } from "../converters/salvage-tool-calls.js";
+import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart, splitLiveToolMarker } from "../converters/salvage-tool-calls.js";
 import { googleSearchTool } from "../tools/google-search.js";
 import { startLog, finishLog, redactHeaders, type LogToolCall } from "../log-store.js";
 import {
@@ -240,6 +240,8 @@ export async function handleMessages(c: Context): Promise<Response> {
         // salvage 無効時 (Google 以外) は常に live でそのまま送出する。
         let textBuffer = "";
         let textMode: "undecided" | "live" | "buffer" = salvageEnabled ? "undecided" : "live";
+        // live モード中、ツールマーカーの前置プレフィックスかもしれない末尾を保留するバッファ
+        let liveHold = "";
 
         const openTextBlock = () => {
           if (textBlockIndex !== null) return;
@@ -298,13 +300,36 @@ export async function handleMessages(c: Context): Promise<Response> {
               }
               case "text-delta": {
                 if (textMode === "live") {
-                  openTextBlock();
-                  loggedText += part.textDelta;
-                  enqueue({
-                    type: "content_block_delta",
-                    index: textBlockIndex!,
-                    delta: { type: "text_delta", text: part.textDelta },
-                  });
+                  // salvage 有効時は live 中でも [Tool Use:] echo の出現を監視し、
+                  // 見つかったら残りを buffer へ回して salvage する
+                  if (!salvageEnabled) {
+                    openTextBlock();
+                    loggedText += part.textDelta;
+                    enqueue({
+                      type: "content_block_delta",
+                      index: textBlockIndex!,
+                      delta: { type: "text_delta", text: part.textDelta },
+                    });
+                    break;
+                  }
+                  liveHold += part.textDelta;
+                  const { emit, hold, holdIsTool } = splitLiveToolMarker(liveHold);
+                  if (emit) {
+                    openTextBlock();
+                    loggedText += emit;
+                    enqueue({
+                      type: "content_block_delta",
+                      index: textBlockIndex!,
+                      delta: { type: "text_delta", text: emit },
+                    });
+                  }
+                  if (holdIsTool) {
+                    textMode = "buffer";
+                    textBuffer = hold;
+                    liveHold = "";
+                  } else {
+                    liveHold = hold;
+                  }
                   break;
                 }
                 // undecided / buffer: 蓄積し、先頭の形で送出方式を決める
@@ -418,6 +443,13 @@ export async function handleMessages(c: Context): Promise<Response> {
             }
           }
 
+          // live モードで保留した末尾 (未完のマーカープレフィックス) が残っていれば通常テキストとして送出する
+          if (textMode === "live" && liveHold) {
+            openTextBlock();
+            loggedText += liveHold;
+            enqueue({ type: "content_block_delta", index: textBlockIndex!, delta: { type: "text_delta", text: liveHold } });
+            liveHold = "";
+          }
           // バッファ済みテキストを確定処理する (ツール呼び出しを復元 or 通常テキストとして送出)
           if (textBuffer && textMode !== "live") {
             const salv =

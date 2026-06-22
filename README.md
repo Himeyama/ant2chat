@@ -293,6 +293,7 @@ curl -N 'http://localhost:3000/v1beta/models/llama3.2:streamGenerateContent?alt=
 - 復元対象: `[Tool Use: NAME]\n{ JSON }`、素の JSON や ```` ```json ```` / ```` ```tool_code ```` フェンス内の `{ "name": ..., "args"/"arguments"/"parameters": ... }`、`{"functionCall": {...}}` 等のネスト、`arguments` が文字列化された JSON
 - 既知ツール名に一致するものだけを復元するため、通常の JSON テキスト回答を誤ってツール呼び出し化しない
 - `/v1/messages`・`/v1beta/models/{model}:…`・`/v1/chat/completions`（Gemini 変換）の stream / non-stream すべてに効く。ストリーミングでは先頭がツール呼び出しらしいテキストのみバッファし、通常テキストは逐次そのまま流す
+- ストリーミングで Gemini が説明文を先に出してから `[Tool Use: ...]` を吐くケースにも対応する。先頭が通常テキストでも、途中に現れた `[Tool Use:` マーカーを検出してそこから先をバッファし直し、ツール呼び出しとして復元する（マーカー直前までのテキストはそのまま流す）
 - 設定は不要（自動）。誤検出は既知ツール名一致で抑止している
 
 ### Gemini: 認証ヘッダー
