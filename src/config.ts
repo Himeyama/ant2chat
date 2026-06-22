@@ -1,5 +1,27 @@
 import { parseArgs } from "node:util";
 
+const supportsColor = process.stdout.isTTY && !process.env.NO_COLOR;
+
+const C = supportsColor ? {
+  RED: '\x1b[0;31m',
+  YELLOW: '\x1b[0;33m',
+  GREEN: '\x1b[1;32m',
+  CYAN: '\x1b[0;36m',
+  CYAN_DIM: '\x1b[2;36m',
+  GRAY: '\x1b[0;90m',
+  BOLD: '\x1b[1m',
+  NC: '\x1b[0m',
+} : {
+  RED: '',
+  YELLOW: '',
+  GREEN: '',
+  CYAN: '',
+  CYAN_DIM: '',
+  GRAY: '',
+  BOLD: '',
+  NC: '',
+};
+
 const PROVIDER_URLS: Record<string, string> = {
   ollama: "http://localhost:11434/v1",
   openai: "https://api.openai.com/v1",
@@ -20,6 +42,7 @@ const { values } = parseArgs({
     global:      { type: "boolean", short: "g" },
     "no-search": { type: "boolean" },
     min:         { type: "boolean" },
+    tui:         { type: "boolean" },
     "gemini-relay-url": { type: "string" },
     "gemini-cache": { type: "boolean" },
     "no-gemini-cache": { type: "boolean" },
@@ -31,56 +54,57 @@ const { values } = parseArgs({
 });
 
 if (values.help) {
-  console.log(`\
-ant2chat — Anthropic Messages API → OpenAI Chat Completions proxy
+  console.log(`${C.BOLD}ant2chat${C.NC} — Anthropic Messages API → OpenAI Chat Completions proxy
 
-Usage:
+${C.GREEN}Usage:${C.NC}
   ant2chat [options]
 
-Options:
-      --provider <name>   Upstream provider: ollama | openai | responses | openrouter | google | gemini | azure (default: ollama)
-  -u, --url <url>         Upstream base URL. Provider is auto-detected from the URL when --provider is omitted
-  -p, --port <port>       Listen port (default: 3000)
-  -k, --api-key <key>     Upstream API key
-      --auth-type <type>  Auth header type: bearer | api-key | x-goog-api-key
+${C.GREEN}Options:${C.NC}
+      ${C.CYAN}--provider${C.NC} ${C.CYAN_DIM}<name>${C.NC}   Upstream provider: ollama | openai | responses | openrouter | google | gemini | azure (default: ollama)
+  ${C.CYAN}-u${C.NC}, ${C.CYAN}--url${C.NC} ${C.CYAN_DIM}<url>${C.NC}         Upstream base URL. Provider is auto-detected from the URL when --provider is omitted
+  ${C.CYAN}-p${C.NC}, ${C.CYAN}--port${C.NC} ${C.CYAN_DIM}<port>${C.NC}       Listen port (default: 3000)
+  ${C.CYAN}-k${C.NC}, ${C.CYAN}--api-key${C.NC} ${C.CYAN_DIM}<key>${C.NC}     Upstream API key
+      ${C.CYAN}--auth-type${C.NC} ${C.CYAN_DIM}<type>${C.NC}  Auth header type: bearer | api-key | x-goog-api-key
                           (default: bearer; google/gemini: x-goog-api-key, azure: api-key)
-  -m, --model <model>     Force model name (overrides client's model field)
-  -g, --global            Listen on 0.0.0.0 (expose to network)
-      --no-search         Disable built-in web search tool
-      --min               Forward a minimal tool set: strip agent / task / scheduling
+  ${C.CYAN}-m${C.NC}, ${C.CYAN}--model${C.NC} ${C.CYAN_DIM}<model>${C.NC}     Force model name (overrides client's model field)
+  ${C.CYAN}-g${C.NC}, ${C.CYAN}--global${C.NC}            Listen on 0.0.0.0 (expose to network)
+      ${C.CYAN}--no-search${C.NC}         Disable built-in web search tool
+      ${C.CYAN}--min${C.NC}               Forward a minimal tool set: strip agent / task / scheduling
                           client tools (Agent, Task*, Cron*, ScheduleWakeup, Monitor, etc.)
                           before sending the request upstream
-      --gemini-relay-url <url>  For --provider google/gemini: POST every Gemini request verbatim to this exact URL
+      ${C.CYAN}--tui${C.NC}               Show request/response logs in a full-screen terminal UI with mouse support
+      ${C.CYAN}--gemini-relay-url${C.NC} ${C.CYAN_DIM}<url>${C.NC}  For --provider google/gemini: POST every Gemini request verbatim to this exact URL
                                 instead of letting the SDK build {baseURL}/models/{model}:generateContent
                                 (the ?alt=sse query is preserved for streaming)
-      --gemini-cache          For --provider google/gemini: use explicit caching (CachedContent). Enabled by
+      ${C.CYAN}--gemini-cache${C.NC}          For --provider google/gemini: use explicit caching (CachedContent). Enabled by
                               default. The stable prefix (systemInstruction + tools + leading contents) is
                               cached and referenced via cachedContent, so it is not re-sent each request.
                               Works with --gemini-relay-url too (generate goes via relay; cache create/delete
                               go directly to the Gemini cachedContents endpoint)
-      --no-gemini-cache       Disable explicit caching
-      --gemini-cache-ttl <s>  Explicit cache TTL in seconds (default: 600)
-      --strip-system-line <text>  Remove any line of the incoming system prompt that contains <text>
+      ${C.CYAN}--no-gemini-cache${C.NC}       Disable explicit caching
+      ${C.CYAN}--gemini-cache-ttl${C.NC} ${C.CYAN_DIM}<s>${C.NC}  Explicit cache TTL in seconds (default: 600)
+      ${C.CYAN}--strip-system-line${C.NC} ${C.CYAN_DIM}<text>${C.NC}  Remove any line of the incoming system prompt that contains <text>
                                   (case-sensitive substring match). Comma-separated for multiple patterns;
                                   also repeatable
-  -h, --help              Show this help
+  ${C.CYAN}-h${C.NC}, ${C.CYAN}--help${C.NC}              Show this help
 
-Environment variables (overridden by CLI options):
-  CHAT_BASE_URL                  Upstream base URL
-  PORT                           Listen port
-  CHAT_API_KEY                   Upstream API key
-  OPENAI_API_KEY                 API key fallback when --provider openai/responses is used
-  OPENROUTER_API_KEY             API key fallback when --provider openrouter is used
-  GOOGLE_GENERATIVE_AI_API_KEY   API key fallback when --provider google is used
-  AZURE_OPENAI_API_KEY           API key fallback when --provider azure is used
-  CHAT_AUTH_TYPE                 Auth header type
-  CHAT_DEFAULT_MODEL             Default model name
-  NO_SEARCH                      Disable built-in web search tool (set to "1" or "true")
-  MIN_TOOLS                      Forward a minimal tool set (set to "1" or "true")
-  GEMINI_RELAY_URL               For --provider google/gemini: POST every Gemini request verbatim to this exact URL
-  GEMINI_CACHE                   For --provider google/gemini: explicit caching (enabled by default; set to "0" or "false" to disable)
-  GEMINI_CACHE_TTL               Explicit cache TTL in seconds (default: 600)
-  STRIP_SYSTEM_LINE              Remove any system-prompt line containing this text (comma-separated for multiple patterns)
+${C.GREEN}Environment variables${C.NC} (overridden by CLI options):
+  ${C.CYAN}CHAT_BASE_URL${C.NC}                  Upstream base URL
+  ${C.CYAN}PORT${C.NC}                           Listen port
+  ${C.CYAN}CHAT_API_KEY${C.NC}                   Upstream API key
+  ${C.CYAN}OPENAI_API_KEY${C.NC}                 API key fallback when --provider openai/responses is used
+  ${C.CYAN}OPENROUTER_API_KEY${C.NC}             API key fallback when --provider openrouter is used
+  ${C.CYAN}GOOGLE_GENERATIVE_AI_API_KEY${C.NC}   API key fallback when --provider google is used
+  ${C.CYAN}AZURE_OPENAI_API_KEY${C.NC}           API key fallback when --provider azure is used
+  ${C.CYAN}CHAT_AUTH_TYPE${C.NC}                 Auth header type
+  ${C.CYAN}CHAT_DEFAULT_MODEL${C.NC}             Default model name
+  ${C.CYAN}NO_SEARCH${C.NC}                      Disable built-in web search tool (set to "1" or "true")
+  ${C.CYAN}MIN_TOOLS${C.NC}                      Forward a minimal tool set (set to "1" or "true")
+  ${C.CYAN}TUI_LOG${C.NC}                        Show logs in a full-screen terminal UI (set to "1" or "true")
+  ${C.CYAN}GEMINI_RELAY_URL${C.NC}               For --provider google/gemini: POST every Gemini request verbatim to this exact URL
+  ${C.CYAN}GEMINI_CACHE${C.NC}                   For --provider google/gemini: explicit caching (enabled by default; set to "0" or "false" to disable)
+  ${C.CYAN}GEMINI_CACHE_TTL${C.NC}               Explicit cache TTL in seconds (default: 600)
+  ${C.CYAN}STRIP_SYSTEM_LINE${C.NC}              Remove any system-prompt line containing this text (comma-separated for multiple patterns)
 `);
   process.exit(0);
 }
@@ -175,6 +199,7 @@ try {
 
 const noSearchEnv = process.env.NO_SEARCH === "1" || process.env.NO_SEARCH === "true";
 const minToolsEnv = process.env.MIN_TOOLS === "1" || process.env.MIN_TOOLS === "true";
+const tuiLogEnv = process.env.TUI_LOG === "1" || process.env.TUI_LOG === "true";
 // 明示キャッシュは google/gemini で既定 ON。--no-gemini-cache / GEMINI_CACHE=0|false で無効化する。
 const geminiCacheDisabled =
   Boolean(values["no-gemini-cache"]) ||
@@ -222,6 +247,7 @@ export const config = {
   defaultModel:  values.model != null ? String(values.model) : (process.env.CHAT_DEFAULT_MODEL ?? geminiParsed?.model ?? ""),
   noSearch:      Boolean(values["no-search"]) || noSearchEnv,
   minTools:      Boolean(values.min) || minToolsEnv,
+  tuiLog:        values.tui ?? (process.env.TUI_LOG !== undefined ? tuiLogEnv : true),
   geminiRelayURL,
   geminiCache:    !geminiCacheDisabled,
   geminiCacheTtl: resolveGeminiCacheTtl(),

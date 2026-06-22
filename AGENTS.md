@@ -67,6 +67,7 @@ src/
 ├── gemini-test-page.ts          # GET /v1beta/models/{model}:… で返すテストページ (HTML)
 ├── logs-page.ts                 # GET /logs で返す通信ログ閲覧ページ (HTML)
 ├── log-store.ts                 # 通信ログのインメモリストア (startLog / finishLog / getLogs / clearLogs)
+├── tui-log.ts                   # フルスクリーン TUI ログビューア。マウスクリックで会話ログを折りたたみ表示
 ├── gemini-cache.ts              # Gemini 明示キャッシュ (CachedContent) を fetch 層で透過処理 (makeGeminiCacheFetch)
 ├── handlers/
 │   ├── messages.ts              # POST /v1/messages の処理。ストリーム・非ストリーム両対応。toProviderOptions をエクスポート
@@ -107,6 +108,7 @@ Options:
   -g, --global            0.0.0.0 でリッスン (ネットワークに公開)
       --no-search         組み込み Web 検索ツールを無効化
       --min               最小構成のツールのみ転送する。エージェント実行・タスク管理・スケジューリング系のクライアントツール (Agent / Task* / Cron* / ScheduleWakeup / Monitor など) を上流へ送る前に除外する
+      --tui               リクエスト・レスポンスのログをフルスクリーン TUI で表示する。マウスクリックで各エントリを折りたたみ表示
       --gemini-relay-url <url>  google/gemini 限定。SDK に URL を組み立てさせず、全 Gemini リクエストをこの URL へそのまま転送する
       --gemini-cache          google/gemini で明示キャッシュ (CachedContent) を使う (既定で有効)。安定プレフィックス (systemInstruction + tools + 先頭 contents) をキャッシュし cachedContent で参照することで毎回の再送を避ける。--gemini-relay-url 併用時も有効 (生成は relay 経由、作成/削除は Gemini の cachedContents へ直送)
       --no-gemini-cache       明示キャッシュを無効化する
@@ -136,6 +138,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `PORT` | 任意 | Listen ポート。デフォルト: `3000` |
 | `NO_SEARCH` | 任意 | `1` または `true` で組み込み Web 検索ツールを無効化 |
 | `MIN_TOOLS` | 任意 | `--min` のフォールバック。`1` または `true` で最小構成のツールのみ転送 |
+| `TUI_LOG` | 任意 | `--tui` のフォールバック。`1` または `true` でフルスクリーン TUI ログを有効化 |
 | `GEMINI_RELAY_URL` | 任意 | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
 | `GEMINI_CACHE` | 任意 | 明示キャッシュ (`--provider google` / `gemini` 限定)。**既定で有効**。`0` または `false` で無効化 (`--no-gemini-cache` と同等) |
 | `GEMINI_CACHE_TTL` | 任意 | `--gemini-cache-ttl` のフォールバック。明示キャッシュの TTL (秒)。デフォルト: 600 |

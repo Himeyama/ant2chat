@@ -1,7 +1,7 @@
 import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
-import { highlightJson } from "../server.js";
+import { tuiLog } from "../tui-log.js";
 import { filterSystemForNonClaudeModel, toMessages, toToolChoice, stripSystemLines, MIN_EXCLUDED_TOOLS } from "../converters/shared.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
 import { buildKnownToolNames, salvageToolCallsFromText, classifyStreamStart, splitLiveToolMarker } from "../converters/salvage-tool-calls.js";
@@ -94,7 +94,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
   if (config.defaultModel && config.defaultModel !== requestedModel) {
     summary["model_requested"] = requestedModel;
   }
-  console.log(highlightJson(JSON.stringify(summary, null, 2)));
+  tuiLog.addRequest(summary);
 
   const logEntry = startLog({
     endpoint: "/v1/chat/completions",

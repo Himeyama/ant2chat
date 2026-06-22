@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http";
 import type { WebSocket } from "ws";
 import { config } from "../config.js";
-import { highlightJson } from "../server.js";
+import { tuiLog } from "../tui-log.js";
 import { extractUpstreamError } from "./provider.js";
 import { filterMinTools, finalSystemForLog } from "../converters/shared.js";
 import { startLog, finishLog, redactHeaders } from "../log-store.js";
@@ -53,7 +53,7 @@ export async function handleResponsesWs(
       if (config.defaultModel && config.defaultModel !== body.model) {
         summary["model_requested"] = body.model;
       }
-      console.log(highlightJson(JSON.stringify(summary, null, 2)));
+      tuiLog.addRequest(summary);
 
       const logEntry = startLog({
         endpoint: "/v1/responses (ws)",

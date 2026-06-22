@@ -2,7 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText, type LanguageModelV1, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
-import { highlightJson } from "../server.js";
+import { tuiLog } from "../tui-log.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
@@ -143,7 +143,7 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
   if (config.defaultModel && config.defaultModel !== modelFromPath) {
     summary["model_requested"] = modelFromPath;
   }
-  console.log(highlightJson(JSON.stringify(summary, null, 2)));
+  tuiLog.addRequest(summary);
 
   const logEntry = startLog({
     endpoint: `/v1beta/models/:${action}`,

@@ -123,6 +123,13 @@ export interface FinishLogData {
   error?: string;
 }
 
+type FinishLogHook = (entry: LogEntry) => void;
+const finishLogHooks: FinishLogHook[] = [];
+
+export function onFinishLog(fn: FinishLogHook): void {
+  finishLogHooks.push(fn);
+}
+
 // 完了時にトークン数・所要時間・レスポンス (またはエラー) を記録する。
 export function finishLog(entry: LogEntry, data: FinishLogData): void {
   entry.durationMs = Date.now() - entry.timestamp;
@@ -137,6 +144,7 @@ export function finishLog(entry: LogEntry, data: FinishLogData): void {
   } else {
     entry.status = "ok";
   }
+  for (const hook of finishLogHooks) hook(entry);
 }
 
 export function getLogs(): LogEntry[] {

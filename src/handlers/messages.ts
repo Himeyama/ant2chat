@@ -2,7 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, streamText, type JSONValue, type LanguageModelV1, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
-import { highlightJson } from "../server.js";
+import { tuiLog } from "../tui-log.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog, toMessages, toToolChoice } from "../converters/shared.js";
 import { toChatCompletionsTools } from "../converters/to-chat-completions.js";
 import { toGeminiTools } from "../converters/to-gemini.js";
@@ -137,6 +137,7 @@ export async function handleMessages(c: Context): Promise<Response> {
   body.tools = filterMinTools(body.tools);
   const toolNames = body.tools?.map((t) => t.name) ?? [];
   const summary: Record<string, unknown> = {
+    endpoint: "/v1/messages",
     model,
     stream: body.stream ?? false,
     messages: body.messages,
@@ -146,7 +147,7 @@ export async function handleMessages(c: Context): Promise<Response> {
   if (config.defaultModel && config.defaultModel !== body.model) {
     summary["model_requested"] = body.model;
   }
-  console.log(highlightJson(JSON.stringify(summary, null, 2)));
+  tuiLog.addRequest(summary);
 
   const system = body.system != null && !model.toLowerCase().includes("claude")
     ? filterSystemForNonClaudeModel(body.system, model)

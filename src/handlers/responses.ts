@@ -1,7 +1,7 @@
 import { generateText, streamText, type ToolSet } from "ai";
 import type { Context } from "hono";
 import { config } from "../config.js";
-import { highlightJson } from "../server.js";
+import { tuiLog } from "../tui-log.js";
 import { filterMinTools, filterSystemForNonClaudeModel, finalSystemForLog } from "../converters/shared.js";
 import { toMessagesFromResponses, toToolsFromResponses, toToolChoiceFromResponses } from "../converters/from-responses.js";
 import { googleSearchTool } from "../tools/google-search.js";
@@ -330,7 +330,7 @@ export async function handleResponses(c: Context): Promise<Response> {
   if (config.defaultModel && config.defaultModel !== body.model) {
     summary["model_requested"] = body.model;
   }
-  console.log(highlightJson(JSON.stringify(summary, null, 2)));
+  tuiLog.addRequest(summary);
 
   const logEntry = startLog({
     endpoint: "/v1/responses",
