@@ -347,10 +347,9 @@ export async function handleResponses(c: Context): Promise<Response> {
           await emitStreamingLoop(params, emit, logEntry);
         } catch (err) {
           console.error("[stream] upstream error:", err);
-          const { message } = extractUpstreamError(err);
-          const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-          finishLog(logEntry, { error: enriched });
-          controller.enqueue(enc.encode(`event: error\ndata: ${JSON.stringify({ type: "error", code: "server_error", message: enriched })}\n\n`));
+          const { message } = extractUpstreamError(err, model);
+          finishLog(logEntry, { error: message });
+          controller.enqueue(enc.encode(`event: error\ndata: ${JSON.stringify({ type: "error", code: "server_error", message })}\n\n`));
         } finally {
           controller.close();
         }
@@ -425,9 +424,8 @@ export async function handleResponses(c: Context): Promise<Response> {
     return c.json(response);
   } catch (err) {
     console.error("[non-stream] upstream error:", err);
-    const { message, statusCode } = extractUpstreamError(err);
-    const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-    finishLog(logEntry, { error: enriched });
-    return c.json({ error: { code: "server_error", message: enriched } }, statusCode as 400 | 401 | 403 | 404 | 429 | 500 | 502);
+    const { message, statusCode } = extractUpstreamError(err, model);
+    finishLog(logEntry, { error: message });
+    return c.json({ error: { code: "server_error", message } }, statusCode as 400 | 401 | 403 | 404 | 429 | 500 | 502);
   }
 }

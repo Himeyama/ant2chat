@@ -315,10 +315,9 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
           });
         } catch (err) {
           console.error("[gemini stream] upstream error:", err);
-          const { message } = extractUpstreamError(err);
-          const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-          finishLog(logEntry, { error: enriched });
-          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: { code: 500, message: enriched, status: "INTERNAL" } })}\n\n`));
+          const { message } = extractUpstreamError(err, model);
+          finishLog(logEntry, { error: message });
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: { code: 500, message, status: "INTERNAL" } })}\n\n`));
         } finally {
           controller.close();
         }
@@ -415,9 +414,8 @@ export async function handleGenerateContent(c: Context): Promise<Response> {
     return c.json(response);
   } catch (err) {
     console.error("[gemini non-stream] upstream error:", err);
-    const { message, statusCode } = extractUpstreamError(err);
-    const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-    finishLog(logEntry, { error: enriched });
-    return c.json({ error: { code: statusCode, message: enriched, status: "INTERNAL" } }, statusCode as HttpErrorStatus);
+    const { message, statusCode } = extractUpstreamError(err, model);
+    finishLog(logEntry, { error: message });
+    return c.json({ error: { code: statusCode, message, status: "INTERNAL" } }, statusCode as HttpErrorStatus);
   }
 }

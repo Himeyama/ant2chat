@@ -71,10 +71,9 @@ export async function handleResponsesWs(
         await emitStreamingLoop(params, emit, logEntry);
       } catch (err) {
         console.error("[ws] upstream error:", err);
-        const { message } = extractUpstreamError(err);
-        const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-        finishLog(logEntry, { error: enriched });
-        ws.send(JSON.stringify({ type: "error", code: "server_error", message: enriched }));
+        const { message } = extractUpstreamError(err, model);
+        finishLog(logEntry, { error: message });
+        ws.send(JSON.stringify({ type: "error", code: "server_error", message }));
       } finally {
         ws.close();
         resolve();

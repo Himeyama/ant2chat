@@ -233,7 +233,17 @@ export function stripEmptyStringValues(args: unknown): Record<string, unknown> {
   return result;
 }
 
-export function extractUpstreamError(err: unknown): { type: string; message: string; statusCode: number } {
+// model を渡すと、--model / CHAT_DEFAULT_MODEL 指定時に message へ上流モデル名を前置する
+// ([upstream model: ...])。各ハンドラーがクライアントへ返す前にこの enrich を施していたのを共通化。
+export function extractUpstreamError(err: unknown, model?: string): { type: string; message: string; statusCode: number } {
+  const result = extractUpstreamErrorRaw(err);
+  if (model && config.defaultModel) {
+    result.message = `[upstream model: ${model}] ${result.message}`;
+  }
+  return result;
+}
+
+function extractUpstreamErrorRaw(err: unknown): { type: string; message: string; statusCode: number } {
   if (err && typeof err === "object") {
     const e = err as Record<string, unknown>;
     const statusCode = typeof e.statusCode === "number" ? e.statusCode : 502;

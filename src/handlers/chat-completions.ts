@@ -529,10 +529,9 @@ async function handleViaConversion(
           });
         } catch (err) {
           console.error("[chat stream] upstream error:", err);
-          const { message } = extractUpstreamError(err);
-          const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-          finishLog(logEntry, { error: enriched });
-          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: { message: enriched, type: "api_error" } })}\n\n`));
+          const { message } = extractUpstreamError(err, model);
+          finishLog(logEntry, { error: message });
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ error: { message, type: "api_error" } })}\n\n`));
         } finally {
           controller.close();
         }
@@ -616,11 +615,10 @@ async function handleViaConversion(
     return c.json(response);
   } catch (err) {
     console.error("[chat non-stream] upstream error:", err);
-    const { message, statusCode } = extractUpstreamError(err);
-    const enriched = config.defaultModel ? `[upstream model: ${model}] ${message}` : message;
-    finishLog(logEntry, { error: enriched });
+    const { message, statusCode } = extractUpstreamError(err, model);
+    finishLog(logEntry, { error: message });
     return c.json(
-      { error: { message: enriched, type: "api_error" } },
+      { error: { message, type: "api_error" } },
       statusCode as 400 | 401 | 403 | 404 | 429 | 500 | 502
     );
   }
