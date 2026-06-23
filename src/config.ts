@@ -251,5 +251,8 @@ export const config = {
   geminiRelayURL,
   geminiCache:    !geminiCacheDisabled,
   geminiCacheTtl: resolveGeminiCacheTtl(),
+  // 明示キャッシュの診断ログ。GEMINI_CACHE_DEBUG=1|true で、リクエストごとに
+  // 前リクエストとプレフィックスを比較し「追記のみ / 途中変化 / system・tools 変化」を stderr に出す。
+  geminiCacheDebug: process.env.GEMINI_CACHE_DEBUG === "1" || process.env.GEMINI_CACHE_DEBUG === "true",
   stripSystemLine: resolveStripSystemLine(),
 };

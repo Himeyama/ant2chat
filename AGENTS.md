@@ -142,6 +142,7 @@ CLI オプションで上書き可能。`.env.example` をコピーして `.env`
 | `GEMINI_RELAY_URL` | 任意 | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
 | `GEMINI_CACHE` | 任意 | 明示キャッシュ (`--provider google` / `gemini` 限定)。**既定で有効**。`0` または `false` で無効化 (`--no-gemini-cache` と同等) |
 | `GEMINI_CACHE_TTL` | 任意 | `--gemini-cache-ttl` のフォールバック。明示キャッシュの TTL (秒)。デフォルト: 600 |
+| `GEMINI_CACHE_DEBUG` | 任意 | `1` / `true` で明示キャッシュの診断ログを stderr に出す (後述「明示キャッシュ: 診断」) |
 | `STRIP_SYSTEM_LINE` | 任意 | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
 ## コマンド
@@ -323,7 +324,7 @@ Google Gemini API 互換の**受信**エンドポイント (`handleGenerateConte
 - **対象**: `/v1/messages`・`/v1/responses` (HTTP / WebSocket、`emitStreamingLoop` 内で記録)・`/v1/chat/completions`・`/v1beta/models/{model}:generateContent` の全パス。Chat Completions パススルーはレスポンスを解析しないため、SSE は `tee()` で 1 本を複製してバックグラウンドで `usage` / 本文を読み取り、非ストリーム JSON は本文をバッファしてから記録する (`consumePassthroughSSE` / `logPassthroughJson`)
 - **パススルー (ストリーミング) のトークン数**: Azure / OpenAI / OpenRouter などは `stream_options.include_usage` が指定されないとストリーム応答に `usage` を含めないため、`handlePassthrough` が転送前に `ensureStreamUsage()` で `include_usage: true` を補う (AI SDK 経由のパスは SDK が自動付与する)。これがないとパススルーのストリーミングは入力・出力トークンが常に 0 になる。クライアントが `stream_options` を明示済みならその指定を尊重する
 - **保持上限**: 直近 `MAX_LOGS` 件 (200) のリングバッファ。プロセス内のみで永続化しない。再起動でクリアされる
-- **閲覧ページ**: 一覧に Date / Model / Provider / Input / In cache / Output / Cost / Speed (= `outputTokens ÷ durationMs`、tok/s) を表示。横に長い場合は一覧テーブルを縮めず横スクロールさせる (`.table-wrap` が `overflow-x: auto`)。行をクリックすると概要・ヘッダー (折りたたみ)・プロンプト (ロール別)・レスポンス・生 JSON を右ペインに表示する。「更新」「自動更新 (3秒)」「料金表」「クリア」操作あり。一覧の下に合計 (入力・入力キャッシュ・出力・出力キャッシュ・コスト) を表示する
+- **閲覧ページ**: 一覧に Date / Model / Provider / Input / In cache / Output / Cost / Speed (= `outputTokens ÷ durationMs`、tok/s) を表示。**Input 列は入力トークンから入力キャッシュ分を除いた値** (`inputTokens − inputCacheTokens`) を表示し、キャッシュ読み出し分は In cache 列に分離する (行・合計・詳細パネルすべて共通)。横に長い場合は一覧テーブルを縮めず横スクロールさせる (`.table-wrap` が `overflow-x: auto`)。行をクリックすると概要・ヘッダー (折りたたみ)・プロンプト (ロール別)・レスポンス・生 JSON を右ペインに表示する。「更新」「自動更新 (3秒)」「料金表」「クリア」操作あり。一覧の下に合計 (入力・入力キャッシュ・出力・出力キャッシュ・コスト) を表示する
 - **料金表 / コスト**: 「料金表」ボタンでエディタを開き、行ごとに Provider・Model と単価 (Input / In cache / Output / Out cache、$ / 1M tokens) を入力する。設定はブラウザの `localStorage` (`proxa_pricing`) に保存しサーバーには送らない。各ログ行の Provider と Model が料金表行と一致 (大文字小文字を問わず) すれば、`(入力 − キャッシュ) × Input + キャッシュ × In cache + (出力 − 出力キャッシュ) × Output + 出力キャッシュ × Out cache` ÷ 1,000,000 でコストを算出する。一致する料金行がなければ `—`。コスト計算はすべてページ側 (クライアント) で行う
 - **為替レート / 円換算**: 料金表エディタに「1 USD = N JPY」の為替レート欄があり、`localStorage` (`proxa_usdjpy`) に保存する。レートを設定すると、コストを `$X.XXXXXX (JPY NNN)` 形式で表示する (NNN = `コスト × レート` を四捨五入した整数)。未設定時は `$X.XXXXXX` のみ。一覧・合計・詳細パネルすべてに共通の `fmtCost` で反映される
 - **エンドポイント**: ページ本体 `GET /logs`、データ取得 `GET /logs/data` (JSON 配列、新しい順)、クリア `DELETE /logs/data`
@@ -406,6 +407,19 @@ google / gemini プロバイダーの認証ヘッダーは `--auth-type` (環境
 - **適用範囲**: `getProvider()` 経由の Gemini パス全て — `/v1/messages`・`/v1beta/models/{model}:…`・`/v1/chat/completions` (Gemini 変換パス) の stream / non-stream
 - **注意 (単発リクエスト)**: プロキシは将来の再利用を予測できないため、再送されない単発リクエストではキャッシュ作成分のわずかな保管課金が無駄になる。会話を繰り返すクライアント向けの最適化である
 - **起動時バナー**: 有効時 (google/gemini) に `Cache:     explicit (CachedContent, ttl <秒>s)` を表示する。relay 併用時は `..., generate via relay` を付記する
+
+#### 明示キャッシュ: 診断 (`GEMINI_CACHE_DEBUG`)
+
+明示キャッシュは「`systemInstruction` + `tools` + 先頭 `contents`」の**安定したプレフィックス**に依存する。プレフィックスの途中 (= 末尾以外) の要素が 1 つでも変わると、累積ハッシュ `keys[i]` がそこから先すべて変化し、以降のキャッシュが全部ミスする。「キャッシュが効くはずなのに効かない」場合、原因のほとんどは**会話途中のメッセージが前ターンと一致していない** (クライアントが過去メッセージを書き換えて再送する・`systemInstruction` や `tools` が毎ターン微妙に変わる) ことにある。
+
+`GEMINI_CACHE_DEBUG=1` (または `true`) を指定すると、`makeGeminiCacheFetch` (`src/gemini-cache.ts`) がリクエストごとに**前リクエストとプレフィックスを比較**し、結果を stderr (`[gemini-cache] ...`) に出す。`config.geminiCacheDebug` で参照する。
+
+- `✓ 追記のみ`: 前リクエストの全 contents が今回の先頭と一致し、末尾に追加されただけ (append-only)。キャッシュがヒットする健全な状態
+- `⚠ 途中の content[i] が前リクエストから変化`: 末尾より手前の `contents[i]` が前回と変わった。`i` 以降のキャッシュは無効になる。`before[i]` / `after[i]` に変化前後のスニペット (120 字) を出すので、どのメッセージがどう書き換わったかを特定できる
+- `⚠ プレフィックス基点が変化 (systemInstruction / tools)`: `systemInstruction` か `tools` が前回と変わった。**全キャッシュが無効化**される (最も影響が大きい)
+- `初回リクエスト`: 比較対象がまだ無い
+
+比較は直近 1 リクエストとの差分 (`prevRequest` をプロセス内に保持) なので、複数クライアントが同時接続すると会話が交錯して誤検出しうる。**単一の会話 (Claude Code 1 セッションなど) でキャッシュ不発を切り分ける用途**を想定している。
 
 ### システムプロンプトの行除去 (`--strip-system-line`)
 

@@ -321,6 +321,8 @@ export const logsPage = `<!DOCTYPE html>
       return mon + ' ' + pad(d.getDate()) + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
     }
     function fmtNum(n) { return (n == null ? 0 : n).toLocaleString(); }
+    // 入力トークン (入力キャッシュを除く)
+    function inputExclCache(e) { return Math.max(0, (e.inputTokens || 0) - (e.inputCacheTokens || 0)); }
     function fmtSpeed(e) {
       if (e.status !== 'ok' || !e.durationMs || !e.outputTokens) return '—';
       return (e.outputTokens / (e.durationMs / 1000)).toFixed(1) + ' tok/s';
@@ -350,7 +352,7 @@ export const logsPage = `<!DOCTYPE html>
         tr.appendChild(el('td', 'mono model-cell px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap', e.model));
         tr.appendChild(el('td', 'px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap text-px-mut', e.provider));
         var pending = e.status === 'pending';
-        tr.appendChild(el('td', 'num mono px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap', pending ? '…' : fmtNum(e.inputTokens)));
+        tr.appendChild(el('td', 'num mono px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap', pending ? '…' : fmtNum(inputExclCache(e))));
         tr.appendChild(el('td', 'num mono px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap text-px-mut', pending ? '…' : fmtNum(e.inputCacheTokens)));
         tr.appendChild(el('td', 'num mono px-3 py-2 border-b border-px-bdr/30 whitespace-nowrap', pending ? '…' : fmtNum(e.outputTokens)));
         var cost = pending ? null : costOf(e);
@@ -368,7 +370,7 @@ export const logsPage = `<!DOCTYPE html>
       if (logs.length === 0) return;
       var sum = { input: 0, inputCache: 0, output: 0, outputCache: 0, cost: 0 };
       logs.forEach(function (e) {
-        sum.input += e.inputTokens || 0;
+        sum.input += inputExclCache(e);
         sum.inputCache += e.inputCacheTokens || 0;
         sum.output += e.outputTokens || 0;
         sum.outputCache += e.outputCacheTokens || 0;
@@ -473,7 +475,7 @@ export const logsPage = `<!DOCTYPE html>
       add('Provider', e.provider);
       add('Model', e.modelRequested ? (e.modelRequested + ' → ' + e.model) : e.model);
       add('Stream', e.stream ? 'true' : 'false');
-      add('Input', fmtNum(e.inputTokens) + (e.inputCacheTokens ? ' (cache ' + fmtNum(e.inputCacheTokens) + ')' : ''));
+      add('Input', fmtNum(inputExclCache(e)) + (e.inputCacheTokens ? ' (cache ' + fmtNum(e.inputCacheTokens) + ')' : ''));
       add('Output', fmtNum(e.outputTokens) + (e.outputCacheTokens ? ' (cache ' + fmtNum(e.outputCacheTokens) + ')' : ''));
       var dCost = costOf(e);
       add('Cost', dCost == null ? '—' : fmtCost(dCost));

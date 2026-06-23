@@ -101,6 +101,7 @@ CLI オプションで上書き可能。
 | `GEMINI_RELAY_URL` | `--gemini-relay-url` のフォールバック。`--provider google` / `gemini` 限定の中継先 URL |
 | `GEMINI_CACHE` | 明示キャッシュ (`--provider google` / `gemini` 限定)。**既定で有効**。`0` または `false` で無効化 (`--no-gemini-cache` と同等) |
 | `GEMINI_CACHE_TTL` | `--gemini-cache-ttl` のフォールバック。明示キャッシュの TTL (秒)。デフォルト: 600 |
+| `GEMINI_CACHE_DEBUG` | `1` / `true` で明示キャッシュの診断ログを stderr に出す。プレフィックスが前リクエストと食い違う箇所 (途中のメッセージ変化・system/tools 変化) を検出し、キャッシュ不発の原因を切り分ける |
 | `STRIP_SYSTEM_LINE` | `--strip-system-line` のフォールバック。カンマ区切りで複数パターン可。指定文字列を含むシステムプロンプト行を除去 |
 
 ### 設定方法
@@ -192,11 +193,11 @@ proxa 自身は受信リクエストを認証しない。上流へ渡す API キ
 
 プロキシを通過したリクエストを記録し、ブラウザで `/logs` を開くと一覧で確認できる。
 
-- 一覧には日時・モデル・プロバイダー・入力トークン・入力キャッシュ・出力トークン・コスト・速度 (tok/s) を表示する
+- 一覧には日時・モデル・プロバイダー・入力トークン・入力キャッシュ・出力トークン・コスト・速度 (tok/s) を表示する。**入力トークン列は入力キャッシュ分を除いた値** (入力トークン − 入力キャッシュ) で、キャッシュ読み出し分は入力キャッシュ列に分離する
 - 一覧の下に合計 (入力・入力キャッシュ・出力・出力キャッシュ・コスト) を表示する
 - 「料金表」ボタンで単価を設定できる。行ごとに Provider・Model と単価 (Input / In cache / Output / Out cache、100 万トークンあたりの $) を入力すると、Provider と Model が一致 (大文字小文字を問わず) するログのコストを自動計算する。一致する料金がなければ `—`。設定はブラウザに保存される (サーバーには送らない)
 - 料金表に「1 USD = N JPY」の為替レートを設定すると、コストを `$X.XXXXXX (JPY NNN)` 形式で円換算表示する (未設定なら $ のみ)
-- 入力トークンにはキャッシュ分が含まれる。コストはキャッシュ分を入力単価から差し引き、入力キャッシュ単価で計算する
+- 上流から得られる入力トークン (`inputTokens`) にはキャッシュ分が含まれるが、一覧・合計・詳細の入力トークン表示はキャッシュ分を差し引いた値にする。コストもキャッシュ分を入力単価から差し引き、入力キャッシュ単価で計算する
 - 入力キャッシュは OpenAI 系 (`cached_tokens`) に加え、OpenRouter (`promptTokensDetails.cachedTokens`)・Gemini (`cachedContentTokenCount`) も記録する。Gemini はキャッシュ数を SDK が捨てるため、上流レスポンスを覗いて回収している (ストリーミング・非ストリーミング両対応)。SSE / JSON の判定はレスポンスの `content-type` で行うため、非ストリーム応答の本文に `data:` (データ URI など) が含まれていても入力キャッシュを正しく記録する
 - ストリーミングでも上流が usage を返すよう、OpenAI 系プロバイダー (`openai` / `responses` / `azure`) には `stream_options: { include_usage: true }` を要求する (`compatibility: "strict"`)。これがないと上流が usage を返さず、トークンが 0 (空欄) と表示される。usage を返さない上流に対しては 0 として記録する
 - 一覧が横に長いときはテーブルを横スクロールできる
@@ -370,6 +371,7 @@ proxa --provider gemini --no-gemini-cache -k AIzaSy-xxx
 - `--gemini-relay-url` 併用時も有効。生成リクエストは relay 経由で送り、キャッシュの作成/削除は Gemini の `cachedContents` エンドポイントへ直接送る (生成と作成が同一 Gemini プロジェクトを指す前提)。`/v1/messages`・`/v1beta/models/{model}:…`・`/v1/chat/completions` (Gemini 変換) に効く
 - 再送されない単発リクエストではキャッシュ作成分のわずかな保管課金が無駄になる点に注意
 - 起動時バナーは有効時に `Cache:     explicit (CachedContent, ttl <秒>s)` を表示する
+- **キャッシュが効かないときの切り分け**: キャッシュは「`systemInstruction` + `tools` + 先頭 `contents`」の安定プレフィックスに依存するため、途中のメッセージが前ターンと 1 つでも食い違うと以降が全ミスする。`GEMINI_CACHE_DEBUG=1` を指定すると、リクエストごとに前リクエストとプレフィックスを比較し、`✓ 追記のみ` / `⚠ 途中の content[i] が変化` (変化前後のスニペット付き) / `⚠ system・tools が変化` を stderr (`[gemini-cache] ...`) に出す。単一会話でのキャッシュ不発の原因特定に使う
 
 ### システムプロンプトの行除去 (`--strip-system-line`)
 
