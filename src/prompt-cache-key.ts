@@ -9,13 +9,13 @@
 
 import { createHash } from "node:crypto";
 
-// system テキストと tools の JSON から安定キー (proxa-<hex16>) を導出する。
+// system テキストと tools の JSON から安定キー (llmglot-<hex16>) を導出する。
 export function promptCacheKeyFromParts(systemText: string, toolsJson: string): string {
   const h = createHash("sha256");
   h.update(systemText);
   h.update(" ");
   h.update(toolsJson);
-  return "proxa-" + h.digest("hex").slice(0, 16);
+  return "llmglot-" + h.digest("hex").slice(0, 16);
 }
 
 // 上流へ送る JSON ボディ (Chat Completions 形式 = messages / Responses 形式 = instructions) から

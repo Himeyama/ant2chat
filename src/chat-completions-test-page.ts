@@ -3,7 +3,7 @@ export const chatCompletionsTestPage = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>proxa — Chat Completions API テスト</title>
+  <title>llmglot — Chat Completions API テスト</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
@@ -51,7 +51,7 @@ export const chatCompletionsTestPage = `<!DOCTYPE html>
 
     <header class="mb-10 pb-6 border-b-2 border-px-bdr">
       <h1 class="text-2xl font-bold tracking-widest mb-3">
-        <a href="/" class="text-px-txt no-underline hover:text-px-tea transition-colors"><span class="text-px-tea">▸</span> proxa</a><span class="text-px-mut font-normal"> /v1/chat/completions</span>
+        <a href="/" class="text-px-txt no-underline hover:text-px-tea transition-colors"><span class="text-px-tea">▸</span> llmglot</a><span class="text-px-mut font-normal"> /v1/chat/completions</span>
       </h1>
       <p class="text-px-mut text-sm">OpenAI Chat Completions API (<code>/v1/chat/completions</code>) のテストコンソール。</p>
     </header>

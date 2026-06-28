@@ -3,7 +3,7 @@ export const logsPage = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>proxa — 通信ログ</title>
+  <title>llmglot — 通信ログ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
@@ -160,7 +160,7 @@ export const logsPage = `<!DOCTYPE html>
 
     <header class="mb-6 pb-5 border-b-2 border-px-bdr">
       <h1 class="text-xl font-bold tracking-widest mb-2">
-        <a href="/" class="text-px-txt no-underline hover:text-px-tea transition-colors"><span class="text-px-tea">▸</span> proxa</a><span class="text-px-mut font-normal"> /logs</span>
+        <a href="/" class="text-px-txt no-underline hover:text-px-tea transition-colors"><span class="text-px-tea">▸</span> llmglot</a><span class="text-px-mut font-normal"> /logs</span>
       </h1>
       <p class="text-px-mut text-xs">プロキシを通過したリクエストの通信ログ。行をクリックするとプロンプトの詳細を表示します。</p>
     </header>
@@ -250,8 +250,8 @@ export const logsPage = `<!DOCTYPE html>
     var timer = null;
 
     // --- 料金表 (localStorage に保存) ---
-    var PRICING_KEY = 'proxa_pricing';
-    var USDJPY_KEY = 'proxa_usdjpy';
+    var PRICING_KEY = 'llmglot_pricing';
+    var USDJPY_KEY = 'llmglot_usdjpy';
     var DEFAULT_USDJPY = 160; // 為替レート未設定時のデフォルト (1 USD = 160 円)
     var pricing = loadPricing();
     var usdJpy = loadUsdJpy(); // 1 USD = usdJpy 円 (0 = 円換算なし)

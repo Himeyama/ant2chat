@@ -3,7 +3,7 @@ export const usagePage = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>proxa</title>
+  <title>llmglot</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@ export const usagePage = `<!DOCTYPE html>
 
     <header class="mb-10 pb-6 border-b-2 border-px-bdr">
       <h1 class="text-3xl font-bold tracking-widest mb-3 text-px-txt">
-        <span class="text-px-tea">▸</span> proxa
+        <span class="text-px-tea">▸</span> llmglot
       </h1>
       <p class="text-px-mut text-sm leading-loose">
         Anthropic Messages API (<code>/v1/messages</code>)、OpenAI Responses API (<code>/v1/responses</code>)、OpenAI Chat Completions API (<code>/v1/chat/completions</code>)、Google Gemini API (<code>/v1beta/models/{model}:generateContent</code>) を受け取り、<br>
@@ -197,28 +197,28 @@ export const usagePage = `<!DOCTYPE html>
         <span class="text-px-tea">■</span> 使用例
       </h2>
       <pre><span class="comment"># Ollama (デフォルト)</span>
-proxa -u http://localhost:11434/v1 -m llama3.2
+llmglot -u http://localhost:11434/v1 -m llama3.2
 
 <span class="comment"># OpenAI</span>
-proxa --provider openai --api-key sk-xxx --model gpt-4o
+llmglot --provider openai --api-key sk-xxx --model gpt-4o
 
 <span class="comment"># OpenAI Responses API</span>
-proxa --provider responses --api-key sk-xxx --model gpt-5
+llmglot --provider responses --api-key sk-xxx --model gpt-5
 
 <span class="comment"># OpenRouter</span>
-proxa --provider openrouter --api-key sk-or-xxx --model anthropic/claude-3.5-sonnet
+llmglot --provider openrouter --api-key sk-or-xxx --model anthropic/claude-3.5-sonnet
 
 <span class="comment"># Google Gemini</span>
-proxa --provider gemini --api-key AIzaSy-xxx --model gemini-2.0-flash
+llmglot --provider gemini --api-key AIzaSy-xxx --model gemini-2.0-flash
 
 <span class="comment"># Azure (プロバイダー明示)</span>
-proxa --provider azure --api-key &lt;key&gt; -u https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt; -m gpt-4o
+llmglot --provider azure --api-key &lt;key&gt; -u https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt; -m gpt-4o
 
 <span class="comment"># Azure は URL 指定のみでも自動判定</span>
-proxa -u https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt; -k &lt;key&gt; -m gpt-4o
+llmglot -u https://&lt;resource&gt;.openai.azure.com/openai/deployments/&lt;deployment&gt; -k &lt;key&gt; -m gpt-4o
 
 <span class="comment"># Gemini は models/{model}:generateContent 形式の URL を直接指定可能</span>
-proxa -u https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent -k AIzaSy-xxx
+llmglot -u https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent -k AIzaSy-xxx
 
 <span class="comment"># 受信側で Gemini 形式を使う例 (上流はどのプロバイダーでも可)</span>
 curl http://localhost:3000/v1beta/models/gemini-2.5-flash:generateContent \\

@@ -1,4 +1,4 @@
-# proxa 起動スクリプト
+# llmglot 起動スクリプト
 # -Provider openai (デフォルト) / ollama / responses / gemini で切り替え
 param(
     [ValidateSet("openai", "ollama", "responses", "gemini")]

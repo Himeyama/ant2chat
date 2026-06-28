@@ -16,7 +16,7 @@ install: dist/index.js
 	npm install -g .
 
 uninstall:
-	npm uninstall -g proxa
+	npm uninstall -g llmglot
 
 pack: dist/index.js
 	npm pack

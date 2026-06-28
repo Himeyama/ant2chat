@@ -210,10 +210,10 @@ export function getProvider(apiKey: string, capture?: CacheCapture) {
 // モデル未解決時 (--model / CHAT_DEFAULT_MODEL 未設定かつクライアントも model 未指定) に
 // 各 POST ハンドラーが HTTP 400 で返すメッセージ。封筒の形はエンドポイントごとに異なるが文面は共通。
 export const NO_MODEL_FIELD_MESSAGE =
-  'No model specified. Provide a "model" field in the request, or start proxa with --model / CHAT_DEFAULT_MODEL.';
+  'No model specified. Provide a "model" field in the request, or start llmglot with --model / CHAT_DEFAULT_MODEL.';
 // Gemini 受信パスはモデルを URL パスから取るため文面が異なる。
 export const NO_MODEL_PATH_MESSAGE =
-  "No model specified. Provide a model in the URL path, or start proxa with --model / CHAT_DEFAULT_MODEL.";
+  "No model specified. Provide a model in the URL path, or start llmglot with --model / CHAT_DEFAULT_MODEL.";
 
 export function resolveModel(requestedModel: string): string {
   // CLI / 環境変数の強制指定 → クライアント指定。どちらも無ければ空文字

@@ -26,7 +26,7 @@ function Invoke-Messages([hashtable]$Body) {
 # ────────────────────────────
 Write-Host "=== ターン 1: ツール呼び出し ===" -ForegroundColor Cyan
 
-$userMessage = @{ role = "user"; content = 'Use the Bash tool to run: echo "Hello from proxa tool flow"' }
+$userMessage = @{ role = "user"; content = 'Use the Bash tool to run: echo "Hello from llmglot tool flow"' }
 
 $turn1 = Invoke-Messages @{
     model       = $Model
@@ -59,7 +59,7 @@ $toolResults = $toolUseBlocks | ForEach-Object {
     @{
         type        = "tool_result"
         tool_use_id = $_.id
-        content     = "Hello from proxa tool flow"
+        content     = "Hello from llmglot tool flow"
     }
 }
 

@@ -19,7 +19,7 @@ $body = @{
     messages    = @(
         @{
             role    = "user"
-            content = 'Use the Bash tool to run the command: echo "Hello from proxa"'
+            content = 'Use the Bash tool to run the command: echo "Hello from llmglot"'
         }
     )
 } | ConvertTo-Json -Depth 20
